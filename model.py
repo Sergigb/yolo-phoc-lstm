@@ -1,10 +1,6 @@
 import torch
 
 
-"""
-TODO: dude recurrency come on
-"""
-
 class FrameAttention(torch.nn.Module):
     def __init__(self, num_descriptors=10, hidden_size=256, input_size=256, descriptor_size=6):
         """
@@ -13,9 +9,6 @@ class FrameAttention(torch.nn.Module):
         :param input_size: size of the input to the lstm (each descriptor gets linearly projected)
         :param hidden_size: size of the hidden state of the sequence lstm
         :param descriptor_size: size of the descriptors
-
-        descriptors [bs, 10, 6] -> projection -> input [bs, 10, 256] -> flatten -> input [bs, 2560] -> w1 -> [bs, 2560]
-         -> v -> ([bs, 10]) -> sigmoid -> ([bs, 10])
         """
         super(FrameAttention, self).__init__()
 
@@ -29,9 +22,9 @@ class FrameAttention(torch.nn.Module):
 
     def forward(self, descriptors, hidden_state):
         """
-
         :param descriptors: of shape [bs, num_descriptors, descriptor_size]
-        :return: attention
+        :param hidden_state: previous hidden state of the lstm
+        :return: attention over the descriptors of the current frame
         """
 
         embedded = self.desc_to_input(descriptors)
@@ -40,16 +33,12 @@ class FrameAttention(torch.nn.Module):
         x = self.relu(self.w1(x))
         next_input = self.relu(self.w2(x))
         a = self.v(x)
-        _, indices = torch.max(a, dim=1)
         if not self.training:
             a = self.sigmoid(a)
 
         return a, next_input
 
 class RNN(torch.nn.Module):
-    """
-    not really an rrn for now
-    """
     def __init__(self, sequence_length=100, descriptor_size=6, num_descriptors=10, lstm_in_size=256, hidden_size=256):
         super(RNN, self).__init__()
 
@@ -65,7 +54,7 @@ class RNN(torch.nn.Module):
     def forward(self, descriptors):
         """
         :param descriptors: [bs, sequence length, num descriptors, size descriptors]
-        :return:
+        :return: attention mask over the descriptors
         """
         attention = torch.zeros((descriptors.shape[0], self.sequence_length, self.num_descriptors)).cuda()
         h_t = torch.zeros((descriptors.shape[0], self.hidden_size)).cuda()
@@ -77,20 +66,4 @@ class RNN(torch.nn.Module):
             attention[:, i, :], input_t = self.frame_attention(descriptors[:, i, :, :], h_t)
 
         return attention
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
