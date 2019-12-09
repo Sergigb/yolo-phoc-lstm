@@ -2,11 +2,12 @@ from glob import glob
 
 import motmetrics as mm
 import cv2
+import matplotlib.pyplot as plt
+import matplotlib.patches as pat
 
-from utils import get_gt_from_file, Sampler
-
-trans = str.maketrans({'.': r'', '"': r'', '\n': r'', '-': r'', '\'': r''})
-threshold = 0.75
+from utils import get_gt_from_file, Sampler, trans, load_descriptors
+from nms import nms
+threshold = 0.90
 
 def get_metrics(hypothesis_bboxes, hypothesis_ids, gt_path, acc):
     """
@@ -20,21 +21,25 @@ def get_metrics(hypothesis_bboxes, hypothesis_ids, gt_path, acc):
 
     for gt_bboxes_frame, gt_ids_frame, hyp_bboxes_frame, hyp_ids_frame in zip(gt_bboxes, gt_ids,
                                                                               hypothesis_bboxes, hypothesis_ids):
-        distances_frame = mm.distances.iou_matrix(gt_bboxes_frame, hyp_bboxes_frame, max_iou=0.5)
+        distances_frame = mm.distances.iou_matrix(gt_bboxes_frame, hyp_bboxes_frame)
         acc.update(gt_ids_frame, hyp_ids_frame, distances_frame)
 
 
 if __name__ == '__main__':
-    gt_path = 'datasets/rrc-text-videos/ch3_test/'
-    descriptors_path = 'extracted_descriptors_100_test'
+    # gt_path = 'datasets/rrc-text-videos/ch3_test/'  # test
+    gt_path = 'datasets/rrc-text-videos/ch3_train/'  # train
+    # descriptors_path = 'extracted_descriptors/extracted_descriptors_100_test'  # test
+    descriptors_path = 'extracted_descriptors/extracted_descriptors_10'  # train
     annotations_paths = glob(gt_path + '*.xml')
+    # sampler = Sampler(weights_path='models/best/model-epoch-last.pth')
     sampler = Sampler(weights_path='models/best/model-epoch-last.pth')
     acc = mm.MOTAccumulator(auto_id=True)
     for annotations_path in annotations_paths:
-        print("Evaluating file ", annotations_path)
+        print("Processing file ", annotations_path)
         video_path = annotations_path.replace("_GT.xml", ".mp4")
         video_name = video_path.split('/')[-1].replace('.mp4', '')
-        voc_path = annotations_path.replace("GT.xml", "GT_voc.txt")
+        # voc_path = annotations_path.replace("GT.xml", "GT_voc.txt")  # test
+        voc_path = annotations_path.replace("GT.xml", "GT.txt")  # train
 
         cap = cv2.VideoCapture(video_path)
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -48,33 +53,42 @@ if __name__ == '__main__':
             lines = f.readlines()
 
         for line in lines:
-            # line = line.split(',')[-1]
+            line = line.split(',')[-1]
             word = line.translate(trans).lower()
-            predictions_loc, predictions = sampler.sample_video(word, video_name, descriptors_path=descriptors_path)
-            predictions_loc = predictions_loc.squeeze(0)
-            predictions = predictions.squeeze(0).squeeze(1)
+            predictions = sampler.sample_video(word, video_name, descriptors_path=descriptors_path)
+            predictions = predictions.cpu().squeeze(0)
 
-            for i in range(num_frames):
-                if predictions[i] > threshold:
-                    center_x, center_y, w, h = predictions_loc[i, :].tolist()
-                    center_x *= width
-                    w *= width
-                    center_y *= height
-                    h *= height
+            descriptors = load_descriptors(video_name, word, descriptors_path)
+            for frame in range(num_frames):
+                predicted_bboxes_frame = []
+                predicted_ids_frame = []
+                predicted_scores = []
+                for j in range(descriptors.shape[1]):
+                    if predictions[frame, j] > 0.5:
+                        center_x, center_y, w, h, p, _ = descriptors[frame, j]
+                        center_x *= width
+                        w *= width
+                        center_y *= height
+                        h *= height
+                        x = center_x - w / 2.
+                        y = center_y - h / 2.
+                        # predicted_bboxes[frame].append([x, y, w, h])
+                        # predicted_ids[frame].append(word)
+                        predicted_bboxes_frame.append([x, y, w, h])
+                        predicted_ids_frame.append(word)
+                        predicted_scores.append(predictions[frame, j])
 
-                    x = center_x - w / 2.
-                    y = center_y - h / 2.
-
-                    predicted_bboxes[i].append([x, y, w, h])
-                    predicted_ids[i].append(word)  # the id is the word since we have no way of telling detections apart
+                indices = nms.boxes(predicted_bboxes_frame, predicted_scores)  # non maximal suppresion
+                for index in indices:
+                    predicted_bboxes[frame].append(predicted_bboxes_frame[index])
+                    predicted_ids[frame].append(predicted_ids_frame[index])
 
         get_metrics(predicted_bboxes, predicted_ids, annotations_path, acc)
-
     mh = mm.metrics.create()
     summary = mh.compute_many(
-        [acc, acc.events.loc[0:1]],
+        [acc],
         metrics=mm.metrics.motchallenge_metrics,
-        names=['full', 'part'])
+        names=['full'])
 
     strsummary = mm.io.render_summary(
         summary,

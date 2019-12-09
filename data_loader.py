@@ -26,6 +26,8 @@ class yolo_phoc_dataset(data.Dataset):
 
         gt = self.gt[self.labels_keys[index]]
         descriptor = np.load(os.path.join(self.descriptors_path, descriptor_fname))
+        shape = descriptor.shape
+        descriptor = descriptor.reshape((shape[0], shape[1], int(shape[2]/6), 6))
         descriptor = torch.from_numpy(descriptor).type(torch.FloatTensor).squeeze(0)
 
         return descriptor, gt

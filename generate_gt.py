@@ -7,6 +7,7 @@ import glob
 import numpy as np
 import cv2
 
+from utils import trans
 
 labels_fname = 'gt/labels-100-top100.json'
 dataset_path = 'datasets/rrc-text-videos/ch3_train/'
@@ -16,7 +17,7 @@ annotations_paths = glob.glob(dataset_path + '*.xml')
 if not os.path.exists(gt_path):
     os.mkdir(gt_path)
 
-trans = str.maketrans({'.': r'', '"': r'', '\n': r'', '-': r'', '\'': r''})
+
 max_sequence_length = 100  # divide the annotations of the videos in sequences of 250 frames at max
 empty_annotations = np.zeros((max_sequence_length, 5))  # empty annotations array
 labels = {}
@@ -75,6 +76,7 @@ for annotations_path in annotations_paths:
                     if previous_object_id == object_.get('ID'):
                         break  # ignore the rest of the bboxes of the same word in the current frame
             if has_instances and not int(current_frame) % max_sequence_length and not repeated_instance:
+                print(current_frame)
                 video_name = annotations_path.split('/')[-1].replace('_GT.xml', '')
                 ann_fname = 'GT_' + video_name + '_' + word + '_' + str(max_sequence_length) + '_' + \
                             str(int(current_frame) - max_sequence_length + 1) + '.npy'

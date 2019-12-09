@@ -9,6 +9,7 @@ datasets/rrc-text-videos
 *.png
 *.pth
 *.ckpt*
+*.idea
 
 
 # Byte-compiled / optimized / DLL files

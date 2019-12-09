@@ -9,6 +9,7 @@ import torch
 
 from model import RNN
 
+trans = str.maketrans({'.': r'', '"': r'', '\n': r'', '-': r'', '\'': r''})
 
 def plot_grad_flow(named_parameters):
     """
@@ -45,9 +46,9 @@ def plot_grad_flow(named_parameters):
 
 def get_gt_from_file(gtfile):
     """
-    gt = [frame1, frame2, ..., frameN]
+    gt_bboxes = [frame1, frame2, ..., frameN]
     frameN = [annotation1, annotation2, ..., annotationN]
-    annotationN = [object_id, [x, y, w, h]]
+    annotationN = [x, y, w, h]
     :param gtfile: path to ground truth file
     :return: gt
     """
@@ -84,45 +85,63 @@ class Sampler:
     Samples all the detections for a given video and query
     """
     def __init__(self, input_size=600, hidden_size=1024, weights_path='models/best/model-epoch-last.pth'):
-        self.model = RNN(input_size, hidden_size=hidden_size)
+        self.model = RNN()
         self.model.load_state_dict(torch.load(weights_path))
 
     def sample_video(self, query, video_name, descriptors_path='extracted_descriptors_100', print_sorted_files=False):
         self.model.eval()
 
-        files = glob(os.path.join(descriptors_path, 'descriptors_top100_' + video_name + '_' +
+        files = glob(os.path.join(descriptors_path, 'descriptors_top10_' + video_name + '_' +
                                        query + '_*'))
         files = sorted(files)
         if print_sorted_files:
-            print(os.path.join(descriptors_path, 'descriptors_top100_' + video_name + '_' + query + '_*'))
+            print(os.path.join(descriptors_path, 'descriptors_top10_' + video_name + '_' + query + '_*'))
             print(files)
 
         predictions = None
-        predictions_loc = None
         for desc_file in files:
             descriptors = np.load(desc_file)
-            descriptors = torch.from_numpy(descriptors).type(torch.FloatTensor)
+            descriptors = torch.from_numpy(descriptors).type(torch.FloatTensor)\
+                .reshape((1, descriptors.shape[1], int(descriptors.shape[2]/6), 6))
             if torch.cuda.is_available():
                 self.model.cuda()
                 descriptors = descriptors.cuda()
             self.model.eval()
-            preds_loc, preds = self.model(descriptors)
+            preds = self.model(descriptors)
             if predictions is None:
                 predictions = preds
-                predictions_loc = preds_loc
             else:
                 predictions = torch.cat((predictions, preds), 1)
-                predictions_loc = torch.cat((predictions_loc, preds_loc), 1)
 
-        return predictions_loc, predictions
-
+        return predictions
 
 
+def iou(bbox1, bbox2):
+    x1 = max(bbox1[0], bbox2[0])
+    y1 = max(bbox1[1], bbox2[1])
+    x2 = min(bbox1[2], bbox2[2])
+    y2 = min(bbox1[3], bbox2[3])
+
+    intersection = max(0, x2 - x1) * max(0, y2 - y1)
+
+    bbox1area = (bbox1[2] - bbox1[0]) * (bbox1[3] - bbox1[1])
+    bbox2area = (bbox2[2] - bbox2[0]) * (bbox2[3] - bbox2[1])
+
+    iou_score = intersection / float((bbox1area + bbox2area) - intersection)
+    return iou_score
 
 
-
-
-
+def load_descriptors(video_name, query, descriptors_path):
+    files = glob(os.path.join(descriptors_path, 'descriptors_top10_' + video_name + '_' + query + '_*'))
+    files = sorted(files)
+    descriptors = None
+    for file in files:
+        if descriptors is None:
+            descriptors = np.load(file).squeeze()
+        else:
+            descriptors = np.concatenate((descriptors, np.load(file).squeeze()))
+    descriptors = descriptors.reshape((descriptors.shape[0], int(descriptors.shape[1]/6), 6))
+    return descriptors
 
 
 

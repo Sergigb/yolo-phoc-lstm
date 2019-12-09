@@ -16,6 +16,7 @@ priors       = np.array([(0.67, 0.35), (1.0, 0.52), (1.2, 1.0), (1.34, 0.33), (1
                          (3.7, 0.79), (3.0, 1.37), (6.0, 1.4), (4.75, 3.0), (10.3, 2.3), (12.0, 5.0)])
 phoc_size    = 604
 max_sequence_length = 100
+n_descriptors = 25
 
 weights_path = './ckpt/yolo-phoc_175800.ckpt'
 model_input = tf.placeholder(tf.float32, shape=(None,)+img_shape)
@@ -25,20 +26,20 @@ init_op = tf.global_variables_initializer()
 saver = tf.train.Saver()
 
 trans = str.maketrans({'.': r'', '"': r'', '\n': r'', '-': r'', '\'': r''})
-# video_files_path = '../datasets/rrc-text-videos/ch3_train/'  # train
-video_files_path = '../datasets/rrc-text-videos/ch3_test/'  # test
-video_paths = glob.glob(video_files_path + '*.mp4')
 
-# video_paths = ['../datasets/rrc-text-videos/ch3_test/Video_55_3_2.mp4']
-
-is_test = True
+is_test = False
 
 if is_test:
-    descriptors_path = '../extracted_descriptors_100_test'
+    descriptors_path = '../extracted_descriptors/extracted_descriptors_' + str(n_descriptors) + '_test'
+    video_files_path = '../datasets/rrc-text-videos/ch3_test/'  # test
 else:
-    descriptors_path = '../extracted_descriptors_100'
+    descriptors_path = '../extracted_descriptors/extracted_descriptors_' + str(n_descriptors)
+    video_files_path = '../datasets/rrc-text-videos/ch3_train/'  # train
 
-if not os.path.isdir:
+video_paths = glob.glob(video_files_path + '*.mp4')
+# video_paths = ['../datasets/rrc-text-videos/ch3_train/Video_8_5_1.mp4']
+
+if not os.path.isdir(descriptors_path):
     os.mkdir(descriptors_path)
 
 gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.5)
@@ -107,8 +108,8 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
                         out[0, i, j, index + 3] = (np.exp(out[0, i, j, index + 3]) * priors[a, 1] / h) * ar
 
             out = out.reshape((-1, phoc_size + 5))
-            out = out[out[:, 4].argsort()[::-1]]  # keep the top 100 descriptors sorted by the objectness
-            out = out[0:100, :]
+            out = out[out[:, 4].argsort()[::-1]]  # keep the top n descriptors sorted by the objectness
+            out = out[0:n_descriptors, :]
 
             for word in words:
                 q = np.array(build_phoc(word)).reshape(1, -1)
@@ -131,8 +132,8 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
                 shape = descriptors_sequence.shape
                 descriptors_sequence = descriptors_sequence.reshape(shape[0], shape[1], shape[2]*shape[3])
 
-                filename = 'descriptors_top100_' + video_fname + '_' + key.decode('utf-8') + '_' + \
-                           str((max_sequence_length * index) + 1).zfill(6) + '.npy'
+                filename = 'descriptors_top' + str(n_descriptors) + '_' + video_fname + '_' + key.decode('utf-8') \
+                           + '_' + str((max_sequence_length * index) + 1).zfill(6) + '.npy'
                 np.save(os.path.join(descriptors_path, filename), descriptors_sequence)
 
             if num_frames % max_sequence_length:
@@ -142,7 +143,7 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
                 pad = np.zeros((1, max_sequence_length - shape[1], shape[2]*shape[3]))
                 descriptors_sequence = np.concatenate((descriptors_sequence, pad), axis=1)
 
-                filename = 'descriptors_top100_' + video_fname + '_' + key.decode('utf-8') + '_' + \
-                           str((max_sequence_length * int(num_frames/max_sequence_length)) + 1).zfill(6) + '.npy'
+                filename = 'descriptors_top' + str(n_descriptors) + '_'  + video_fname + '_' + key.decode('utf-8') \
+                           + '_' + str((max_sequence_length * int(num_frames/max_sequence_length)) + 1).zfill(6) + '.npy'
                 np.save(os.path.join(descriptors_path, filename), np.array(descriptors_sequence))
 
