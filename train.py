@@ -18,7 +18,7 @@ def main(args):
     learning_rate = args.lr
 
     data_loader = get_data_loader(args.gt_path, args.descriptors_path, args.json_labels_path, args.bs)
-    model = RNN(num_descriptors=args.num_descriptors)
+    model = RNN(num_descriptors=args.num_descriptors, hidden_size=args.hidden_size)
     if torch.cuda.is_available():
         model.cuda()
     model.train()
@@ -92,6 +92,8 @@ if __name__ == '__main__':
                         help='Indicates the epoch where we want to reduce the learning rate')
     parser.add_argument('--num_descriptors', type=int, default=10,
                         help='Number of descriptors per frame')
+    parser.add_argument('--hidden_size', type=int, default=256,
+                        help='Size of the hidden state of the lstm')
     # not used
     parser.add_argument('--clipping', type=float, default=0., help='Gradient clipping')
     args = parser.parse_args()

@@ -84,18 +84,21 @@ class Sampler:
     """
     Samples all the detections for a given video and query
     """
-    def __init__(self, input_size=600, hidden_size=1024, weights_path='models/best/model-epoch-last.pth'):
-        self.model = RNN()
+    def __init__(self, input_size=600, hidden_size=1024, weights_path='models/best/model-epoch-last.pth',
+                 num_descriptors=10):
+        self.model = RNN(num_descriptors=num_descriptors)
         self.model.load_state_dict(torch.load(weights_path))
+        self.num_descriptors = num_descriptors
 
     def sample_video(self, query, video_name, descriptors_path='extracted_descriptors_100', print_sorted_files=False):
         self.model.eval()
 
-        files = glob(os.path.join(descriptors_path, 'descriptors_top10_' + video_name + '_' +
-                                       query + '_*'))
+        files = glob(os.path.join(descriptors_path, 'descriptors_top'+ str(self.num_descriptors) + '_' + video_name +
+                                  '_' + query + '_*'))
         files = sorted(files)
         if print_sorted_files:
-            print(os.path.join(descriptors_path, 'descriptors_top10_' + video_name + '_' + query + '_*'))
+            print(os.path.join(descriptors_path, 'descriptors_top' + str(self.num_descriptors) + '10_' + video_name +
+                               '_' + query + '_*'))
             print(files)
 
         predictions = None
@@ -131,8 +134,9 @@ def iou(bbox1, bbox2):
     return iou_score
 
 
-def load_descriptors(video_name, query, descriptors_path):
-    files = glob(os.path.join(descriptors_path, 'descriptors_top10_' + video_name + '_' + query + '_*'))
+def load_descriptors(video_name, query, descriptors_path, num_descriptors=10):
+    files = glob(os.path.join(descriptors_path, 'descriptors_top' + str(num_descriptors) + '_' + video_name + '_' +
+                              query + '_*'))
     files = sorted(files)
     descriptors = None
     for file in files:

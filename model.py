@@ -14,7 +14,7 @@ class FrameAttention(torch.nn.Module):
 
         self.desc_to_input = torch.nn.Linear(descriptor_size, input_size)
         self.w1 = torch.nn.Linear(input_size*num_descriptors+hidden_size, input_size*num_descriptors+hidden_size)
-        self.w2 = torch.nn.Linear(input_size*num_descriptors+hidden_size, hidden_size)
+        self.w2 = torch.nn.Linear(input_size*num_descriptors+hidden_size, input_size)
         self.v = torch.nn.Linear(input_size*num_descriptors+hidden_size, num_descriptors)
 
         self.relu = torch.nn.ReLU()
@@ -48,8 +48,9 @@ class RNN(torch.nn.Module):
         self.lstm_in_size = lstm_in_size
         self.hidden_size = hidden_size
 
-        self.frame_attention = FrameAttention(num_descriptors=num_descriptors, descriptor_size=descriptor_size)
-        self.lstmcell = torch.nn.LSTMCell(self.lstm_in_size, self.hidden_size)
+        self.frame_attention = FrameAttention(num_descriptors=num_descriptors, descriptor_size=descriptor_size,
+                                              input_size=lstm_in_size, hidden_size=hidden_size)
+        self.lstmcell = torch.nn.LSTMCell(lstm_in_size, hidden_size)
 
     def forward(self, descriptors):
         """
@@ -59,7 +60,7 @@ class RNN(torch.nn.Module):
         attention = torch.zeros((descriptors.shape[0], self.sequence_length, self.num_descriptors)).cuda()
         h_t = torch.zeros((descriptors.shape[0], self.hidden_size)).cuda()
         c_t = torch.zeros((descriptors.shape[0], self.hidden_size)).cuda()
-        input_t = torch.zeros((descriptors.shape[0], self.hidden_size)).cuda()
+        input_t = torch.zeros((descriptors.shape[0], self.lstm_in_size)).cuda()
 
         for i in range(self.sequence_length):
             h_t, c_t = self.lstmcell(input_t, (h_t, c_t))
