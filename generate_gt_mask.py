@@ -7,7 +7,7 @@ import glob
 import numpy as np
 import cv2
 
-from utils import trans, iou
+from utils import trans, iou, load_descriptors
 
 n_descriptors = 10
 labels_fname = 'gt/labels-100-top' + str(n_descriptors) + '.json'
@@ -54,16 +54,7 @@ for annotations_path in annotations_paths:
 
         # load descriptors
         video_name = video_path.split('/')[-1].replace('.mp4', '')
-        descriptor_file = descriptor_root + '/descriptors_top' + str(n_descriptors) + '_' + video_name + '_' + word + '*'
-        files = glob.glob(descriptor_file)
-        files = sorted(files)
-        descriptors = None
-        for file in files:
-            if descriptors is None:
-                descriptors = np.load(file).squeeze()
-            else:
-                descriptors = np.concatenate((descriptors, np.load(file).squeeze()))
-        descriptors = descriptors.reshape((descriptors.shape[0], int(descriptors.shape[1]/6), 6))
+        descriptors = load_descriptors(video_name, word, descriptor_root, num_descriptors=n_descriptors)
 
         for frame in root:
             current_frame = int(frame.get('ID'))
