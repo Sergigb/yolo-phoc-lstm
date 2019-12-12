@@ -18,14 +18,13 @@ def main(args):
     learning_rate = args.lr
 
     data_loader = get_data_loader(args.gt_path, args.descriptors_path, args.json_labels_path, args.bs)
-    model = RNN(num_descriptors=args.num_descriptors, hidden_size=args.hidden_size)
+    model = RNN(num_descriptors=args.num_descriptors, hidden_size=args.hidden_size, lstm_in_size=args.input_size)
     if torch.cuda.is_available():
         model.cuda()
     model.train()
 
     # optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.mm)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
-    # model_loss = Loss()
     model_loss = torch.nn.BCEWithLogitsLoss()
 
     losses = []
@@ -94,11 +93,11 @@ if __name__ == '__main__':
                         help='Number of descriptors per frame')
     parser.add_argument('--hidden_size', type=int, default=256,
                         help='Size of the hidden state of the lstm')
+    parser.add_argument('--input_size', type=int, default=256,
+                        help='Input size to the next step of the lstm')
     # not used
     parser.add_argument('--clipping', type=float, default=0., help='Gradient clipping')
     args = parser.parse_args()
 
     main(args)
 
-
- # 0.047 best so far adam - python train.py -lr 0.01 --save_epoch 5 -ne 75 --decay=0.5 --decay_epoch 15
