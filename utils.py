@@ -84,11 +84,15 @@ class Sampler:
     """
     Samples all the detections for a given video and query
     """
-    def __init__(self, input_size=600, hidden_size=1024, weights_path='models/best/model-epoch-last.pth',
+    def __init__(self, input_size=600, hidden_size=256, weights_path='models/best/model-epoch-last.pth',
                  num_descriptors=10):
-        self.model = RNN(num_descriptors=num_descriptors)
+        self.model = RNN(num_descriptors=num_descriptors, hidden_size=hidden_size)
         self.model.load_state_dict(torch.load(weights_path))
         self.num_descriptors = num_descriptors
+
+        if torch.cuda.is_available():
+            self.model.cuda()
+        self.model.eval()
 
     def sample_video(self, query, video_name, descriptors_path='extracted_descriptors_100', print_sorted_files=False):
         self.model.eval()
@@ -97,7 +101,7 @@ class Sampler:
                                   '_' + query + '_*'))
         files = sorted(files)
         if print_sorted_files:
-            print(os.path.join(descriptors_path, 'descriptors_top' + str(self.num_descriptors) + '10_' + video_name +
+            print(os.path.join(descriptors_path, 'descriptors_top' + str(self.num_descriptors) + '_' + video_name +
                                '_' + query + '_*'))
             print(files)
 
@@ -107,9 +111,7 @@ class Sampler:
             descriptors = torch.from_numpy(descriptors).type(torch.FloatTensor)\
                 .reshape((1, descriptors.shape[1], int(descriptors.shape[2]/6), 6))
             if torch.cuda.is_available():
-                self.model.cuda()
                 descriptors = descriptors.cuda()
-            self.model.eval()
             preds = self.model(descriptors)
             if predictions is None:
                 predictions = preds
