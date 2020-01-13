@@ -16,7 +16,7 @@ priors       = np.array([(0.67, 0.35), (1.0, 0.52), (1.2, 1.0), (1.34, 0.33), (1
                          (3.7, 0.79), (3.0, 1.37), (6.0, 1.4), (4.75, 3.0), (10.3, 2.3), (12.0, 5.0)])
 phoc_size    = 604
 max_sequence_length = 100
-n_descriptors = 25
+n_descriptors = 361  # 19*19
 
 weights_path = './ckpt/yolo-phoc_175800.ckpt'
 model_input = tf.placeholder(tf.float32, shape=(None,)+img_shape)
@@ -37,7 +37,7 @@ else:
     video_files_path = '../datasets/rrc-text-videos/ch3_train/'  # train
 
 video_paths = glob.glob(video_files_path + '*.mp4')
-# video_paths = ['../datasets/rrc-text-videos/ch3_train/Video_8_5_1.mp4']
+# video_paths = ['../datasets/rrc-text-videos/ch3_train/Video_10_1_1.mp4']
 
 if not os.path.isdir(descriptors_path):
     os.mkdir(descriptors_path)
@@ -80,41 +80,53 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
                                                      shape=img_shape, letterbox=True), 0)
             feed_dict = {model_input: inp_feed}
             out = sess.run(model_output, feed_dict)
+            descriptors_frame = []
             for i in range(out.shape[1]):
                 for j in range(out.shape[2]):
+                    max_q = 0.0
+                    max_q_descriptor = None
                     for a in range(num_priors):
                         index = a * (phoc_size + 5)
                         out[0, i, j, index:index + 2] = expit(out[0, i, j, index:index + 2])
                         # phoc expit, I guess it went thru logit to avoid negative sqrt?:
                         out[0, i, j, index + 4:index + phoc_size + 5] = \
                             expit(out[0, i, j, index + 4:index + phoc_size + 5])
+
+                        if out[0, i, j, index+4] <  max_q:
+                            continue
+                        max_q = out[0, i, j, index+4]
+
                         col = float(j)
                         row = float(i)
                         w = float(out.shape[2])
                         h = float(out.shape[1])
-                        img_w = inp.shape[1]
+                        img_w = inp.shape[1]  # move this up vvv
                         img_h = inp.shape[0]
 
                         ar = img_w / img_h  # used recover the original y component and height of the bboxes
-                        half_padd = ((img_w - img_h) / 2) / img_h
+                        half_padd = ((img_w - img_h) / 2) / img_h  # move this up ^^^
 
                         if img_h > img_w: print("height is bigger than width")
 
                         # normalized descriptors
-                        out[0, i, j, index + 0] = ((col + out[0, i, j, index + 0]) / w)
+                        out[0, i, j, index] = ((col + out[0, i, j, index]) / w)
                         out[0, i, j, index + 1] = ((row + out[0, i, j, index + 1]) / h)  # y comp. padded, wrong a/r:
                         out[0, i, j, index + 1] = (out[0, i, j, index + 1] * ar) - half_padd
                         out[0, i, j, index + 2] = (np.exp(out[0, i, j, index + 2]) * priors[a, 0] / w)
                         out[0, i, j, index + 3] = (np.exp(out[0, i, j, index + 3]) * priors[a, 1] / h) * ar
 
-            out = out.reshape((-1, phoc_size + 5))
-            out = out[out[:, 4].argsort()[::-1]]  # keep the top n descriptors sorted by the objectness
-            out = out[0:n_descriptors, :]
+                        max_q_descriptor = out[0, i, j, index:index + phoc_size + 5]
+                    descriptors_frame.append(max_q_descriptor)
+
+            descriptors_frame = np.array(descriptors_frame)
+            # out = out.reshape((-1, phoc_size + 5))
+            # out = out[out[:, 4].argsort()[::-1]]  # keep the top n descriptors sorted by the objectness
+            # out = out[0:n_descriptors, :]
 
             for word in words:
                 q = np.array(build_phoc(word)).reshape(1, -1)
-                distances = pairwise_distances(out[:, 5:], q, metric='cosine')
-                descriptor = np.concatenate((out[:, :5], distances), axis=1)
+                distances = pairwise_distances(descriptors_frame[:, 5:], q, metric='cosine')
+                descriptor = np.concatenate((descriptors_frame[:, :5], distances), axis=1)
                 descriptors[word].append(descriptor)
 
             sys.stdout.write('\rProgress: ' + str(frame) + '/' + str(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))))
