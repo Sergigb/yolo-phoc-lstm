@@ -81,10 +81,21 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
             feed_dict = {model_input: inp_feed}
             out = sess.run(model_output, feed_dict)
             descriptors_frame = []
+
+            w = float(out.shape[2])
+            h = float(out.shape[1])
+            img_w = inp.shape[1]
+            img_h = inp.shape[0]
+            ar = img_w / img_h  # used recover the original y component and height of the bboxes
+            half_padd = ((img_w - img_h) / 2) / img_h
+
             for i in range(out.shape[1]):
                 for j in range(out.shape[2]):
                     max_q = 0.0
                     max_q_descriptor = None
+
+                    col = float(j)
+                    row = float(i)
                     for a in range(num_priors):
                         index = a * (phoc_size + 5)
                         out[0, i, j, index:index + 2] = expit(out[0, i, j, index:index + 2])
@@ -95,16 +106,6 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
                         if out[0, i, j, index+4] <  max_q:
                             continue
                         max_q = out[0, i, j, index+4]
-
-                        col = float(j)
-                        row = float(i)
-                        w = float(out.shape[2])
-                        h = float(out.shape[1])
-                        img_w = inp.shape[1]  # move this up vvv
-                        img_h = inp.shape[0]
-
-                        ar = img_w / img_h  # used recover the original y component and height of the bboxes
-                        half_padd = ((img_w - img_h) / 2) / img_h  # move this up ^^^
 
                         if img_h > img_w: print("height is bigger than width")
 
