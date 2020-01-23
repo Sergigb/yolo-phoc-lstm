@@ -86,7 +86,7 @@ class Sampler:
     """
     def __init__(self, input_size=600, hidden_size=256, weights_path='models/best/model-epoch-last.pth',
                  num_descriptors=10):
-        self.model = RNN(num_descriptors=num_descriptors, hidden_size=hidden_size)
+        self.model = RNN(num_descriptors=num_descriptors, hidden_size=hidden_size, lstm_in_size=input_size)
         self.model.load_state_dict(torch.load(weights_path))
         self.num_descriptors = num_descriptors
 
