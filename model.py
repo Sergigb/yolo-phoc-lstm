@@ -12,24 +12,26 @@ class FrameAttention(torch.nn.Module):
         """
         super(FrameAttention, self).__init__()
 
-        self.desc_to_input = torch.nn.Linear(descriptor_size, input_size)
-        self.w1 = torch.nn.Linear(input_size*num_descriptors+hidden_size, input_size*num_descriptors+hidden_size)
-        self.w2 = torch.nn.Linear(input_size*num_descriptors+hidden_size, input_size)
-        self.v = torch.nn.Linear(input_size*num_descriptors+hidden_size, num_descriptors)
+        size_attention = input_size*num_descriptors+hidden_size+num_descriptors
+        self.desc_to_input = torch.nn.Linear(descriptor_size, input_size)  # delete?
+        self.w1 = torch.nn.Linear(size_attention, size_attention)
+        self.w2 = torch.nn.Linear(size_attention, input_size)
+        self.v = torch.nn.Linear(size_attention, num_descriptors)
 
         self.relu = torch.nn.ReLU()
         self.sigmoid = torch.nn.Sigmoid()
 
-    def forward(self, descriptors, hidden_state):
+    def forward(self, descriptors, hidden_state, prev_attention):
         """
         :param descriptors: of shape [bs, num_descriptors, descriptor_size]
         :param hidden_state: previous hidden state of the lstm
+        :param prev_attention: attention over the previous descriptors
         :return: attention over the descriptors of the current frame
         """
 
         embedded = self.desc_to_input(descriptors)
         x = torch.reshape(embedded, (embedded.shape[0], embedded.shape[1]*embedded.shape[2]))
-        x = torch.cat((x, hidden_state), dim=-1)
+        x = torch.cat((x, hidden_state, prev_attention), dim=-1)
         x = self.relu(self.w1(x))
         next_input = self.relu(self.w2(x))
         a = self.v(x)
@@ -61,10 +63,12 @@ class RNN(torch.nn.Module):
         h_t = torch.zeros((descriptors.shape[0], self.hidden_size)).cuda()
         c_t = torch.zeros((descriptors.shape[0], self.hidden_size)).cuda()
         input_t = torch.zeros((descriptors.shape[0], self.lstm_in_size)).cuda()
+        prev_attention = torch.zeros((descriptors.shape[0], self.num_descriptors)).cuda()
 
         for i in range(self.sequence_length):
             h_t, c_t = self.lstmcell(input_t, (h_t, c_t))
-            attention[:, i, :], input_t = self.frame_attention(descriptors[:, i, :, :], h_t)
+            prev_attention, input_t = self.frame_attention(descriptors[:, i, :, :], h_t, prev_attention)
+            attention[:, i, :] = prev_attention
 
         return attention
 
