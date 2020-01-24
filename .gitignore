@@ -1,5 +1,6 @@
 # some stuff
 datasets/rrc-text-videos
+sort/  # cuz gpl
 *.pyc
 *.npy
 *.avi
