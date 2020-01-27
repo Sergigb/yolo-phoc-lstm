@@ -4,26 +4,26 @@ import glob
 import cv2
 import matplotlib.pyplot as plt
 import matplotlib.patches as pat
-from pip._internal.utils.ui import hidden_cursor
 
 from nms import nms
 
-from utils import Sampler, load_descriptors, trans
+from utils import Sampler, load_descriptors, trans, assign_ids
 
 # video_path = 'datasets/rrc-text-videos/ch3_test/Video_43_6_4.mp4'
 # video_path = 'datasets/rrc-text-videos/ch3_train/Video_42_2_3.mp4'
 # voc_path = 'datasets/rrc-text-videos/ch3_test/Video_43_6_4_GT_voc.txt'
-descriptors_path = 'extracted_descriptors/extracted_descriptors_50'
+descriptors_path = 'extracted_descriptors/extracted_descriptors_361'
 # descriptors_path = 'extracted_descriptors/extracted_descriptors_10_test'
 # weights_path = 'models/model-epoch-200.pth'
 # weights_path = 'models/cluster/model-epoch-last.pth'
-weights_path = 'models/model-epoch-95.pth'
-num_descriptors = 50
+weights_path = 'models/model-epoch-105.pth'
+num_descriptors = 361
 
-video_paths = glob.glob('datasets/rrc-text-videos/ch3_train/*.mp4')
-# video_paths = ['datasets/rrc-text-videos/ch3_train/Video_10_1_1.mp4']
+# video_paths = glob.glob('datasets/rrc-text-videos/ch3_train/*.mp4')
+video_paths = ['datasets/rrc-text-videos/ch3_train/Video_37_2_3.mp4']
 
 for video_path in video_paths:
+    print(video_path)
     if not os.path.isdir('images'):
         os.mkdir('images')
     files = glob.glob('images/*')
@@ -33,7 +33,7 @@ for video_path in video_paths:
     voc_path = 'datasets/rrc-text-videos/ch3_train/' + video_name + '_GT.txt'
 
     cap = cv2.VideoCapture(video_path)
-    sampler = Sampler(weights_path=weights_path, num_descriptors=num_descriptors, hidden_size=512)
+    sampler = Sampler(weights_path=weights_path, num_descriptors=num_descriptors, hidden_size=256, input_size=16)
     detections = [[] for i in range(int(cap.get(cv2.CAP_PROP_FRAME_COUNT)))]
     _, inp = cap.read()
 
@@ -67,27 +67,33 @@ for video_path in video_paths:
                     h *= inp.shape[0]
                     x = center_x - w / 2.
                     y = center_y - h / 2.
-                    rectongles.append([x, y, w ,h])
+                    rectongles.append([x, y, x+w ,y+h])  # sort requires x1, y1, x2, y2
             indices = nms.boxes(rectongles, scores)  # non maximal suppression
 
             for index in indices:
-                detections[frame].append([rectongles[index], word])
+                detections[frame].append([rectongles[index], word])  # TODO: APPEND SCORE
             frame+=1
 
     cap.set(cv2.CAP_PROP_POS_FRAMES, 1)
-    fig, ax = plt.subplots(1, figsize=(15,15))
+    fig, ax = plt.subplots(1, figsize=(10,10))
     ret, inp = cap.read()
     frame = 0
+
+    tracked_detections = assign_ids(detections)  # I should do this for every word like with nms
 
     while ret:
         im = cv2.cvtColor(inp, cv2.COLOR_BGR2RGB)
         plt.cla()
         ax.imshow(im)
 
+        # for detection, untracked_det in zip(tracked_detections[frame], detections[frame]):
         for detection in detections[frame]:
-            x, y, w, h = detection[0]
-            rect = pat.Rectangle((x, y), abs(w), abs(h), linewidth=1, edgecolor=(1, 0, 0), facecolor='none')
-            plt.text(x, y, detection[1], color=(1, 0, 0), fontsize=10)
+            # x1, y1, x2, y2, id = detection
+            x1, y1, x2, y2, _ = detection[0]
+            id = detection[1]
+            rect = pat.Rectangle((x1, y1), abs(x2-x1), abs(y2-y1), linewidth=1, edgecolor=(1, 0, 0), facecolor='none')
+            plt.text(x1, y1, str(id), color=(0, 1, 0), fontsize=10)
+            # plt.text(x1, y2+20, untracked_det[1], color=(1, 0, 0), fontsize=10)
             ax.add_patch(rect)
 
         plt.axis('off')
@@ -98,7 +104,7 @@ for video_path in video_paths:
         frame += 1
         ret, inp = cap.read()
     plt.close()
-    os.system("ffmpeg -framerate 20 -pattern_type glob -i 'images/*.jpeg' -c:v mpeg4 -vb 1M -qscale:v 2 videos/pointer\ top\ 50/" + video_name + ".mp4")
+    os.system("ffmpeg -framerate 20 -pattern_type glob -i 'images/*.jpeg' -c:v mpeg4 -vb 1M -qscale:v 2 videos/pointer\ top\ 361/" + video_name + ".mp4")
     # os.system("ffmpeg -framerate 25 -pattern_type glob -i 'images/*.png' -c:v mpeg4 -vb 1M -qscale:v 2 video.mp4")
 
 
