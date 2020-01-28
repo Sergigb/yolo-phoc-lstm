@@ -153,27 +153,16 @@ def load_descriptors(video_name, query, descriptors_path, num_descriptors=10):
 
 def assign_ids(detections):
     """
-    :param detections: [det_frame_1, det_frame_2...]
-     det_frame_n = [[bbox1, word], [bbox2, word] ...]
+    :param detections:
     :return:
     """
     mot_tracker = Sort()
 
-    detections_bboxes = []
-
-    for detections_frame in detections:
-        detections_frame_bboxes = []
-        for detection in detections_frame:
-            detection[0].append(1)
-            detections_frame_bboxes.append(detection[0])  # not sure what "score" is
-        detections_bboxes.append(np.array(detections_frame_bboxes))
-
     tracked_detections = []
-    for detections_frame_bboxes in detections_bboxes:
+    for detections_frame_bboxes in detections:
         if len(detections_frame_bboxes) == 0:
             detections_frame_bboxes = np.zeros((0, 5))
-
-        tracked_detections.append(mot_tracker.update(detections_frame_bboxes))
+        tracked_detections.append(mot_tracker.update(np.array(detections_frame_bboxes)))
 
     return tracked_detections
 
