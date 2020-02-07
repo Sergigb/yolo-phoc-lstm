@@ -12,7 +12,8 @@ class FrameAttention(torch.nn.Module):
         """
         super(FrameAttention, self).__init__()
 
-        size_attention = input_size*num_descriptors+hidden_size+num_descriptors
+        # size_attention = input_size*num_descriptors+hidden_size+num_descriptors
+        size_attention = input_size * num_descriptors + hidden_size
         self.desc_to_input = torch.nn.Linear(descriptor_size, input_size)  # delete?
         self.w1 = torch.nn.Linear(size_attention, size_attention)
         self.w2 = torch.nn.Linear(size_attention, input_size)
@@ -31,7 +32,8 @@ class FrameAttention(torch.nn.Module):
 
         embedded = self.desc_to_input(descriptors)
         x = torch.reshape(embedded, (embedded.shape[0], embedded.shape[1]*embedded.shape[2]))
-        x = torch.cat((x, hidden_state, prev_attention), dim=-1)
+        # x = torch.cat((x, hidden_state, prev_attention), dim=-1)
+        x = torch.cat((x, hidden_state), dim=-1)
         x = self.relu(self.w1(x))
         next_input = self.relu(self.w2(x))
         a = self.v(x)
