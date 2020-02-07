@@ -61,11 +61,11 @@ def main(args):
     except KeyboardInterrupt:
         pass
 
-    plt.plot(losses)
-    plt.show()
     filename = 'model-epoch-last' + '.pth'
     model_path = os.path.join('models', filename)
     torch.save(model.state_dict(), model_path)
+    plt.plot(losses)
+    plt.show()
 
 
 if __name__ == '__main__':
