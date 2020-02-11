@@ -11,6 +11,7 @@ sort/  # cuz gpl
 *.pth
 *.ckpt*
 *.idea
+results-*
 
 
 # Byte-compiled / optimized / DLL files
