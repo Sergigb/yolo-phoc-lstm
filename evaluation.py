@@ -21,24 +21,43 @@ def get_metrics(hypothesis_bboxes, hypothesis_ids, gt_path, acc):
         distances_frame = mm.distances.iou_matrix(gt_bboxes_frame, hyp_bboxes_frame)
         acc.update(gt_ids_frame, hyp_ids_frame, distances_frame)
 
-gt_path = 'datasets/rrc-text-videos/ch3_test/'  # test
-# gt_path = 'datasets/rrc-text-videos/ch3_train/'  # train
-descriptors_path = 'extracted_descriptors/extracted_descriptors_361'  # test
-# descriptors_path = 'extracted_descriptors/extracted_descriptors_625'  # train
-annotations_paths = glob(gt_path + '*.xml')
+
 num_descriptors = 361
-sampler = Sampler(weights_path='models/best/model-epoch-last-361.pth', num_descriptors=num_descriptors,
+epoch_number = 60
+is_test = False
+
+if is_test:
+    gt_path = 'datasets/rrc-text-videos/ch3_test/'  # test
+    descriptors_path = 'extracted_descriptors/extracted_descriptors_'+ str(num_descriptors) +'_test'  # test
+else:
+    gt_path = 'datasets/rrc-text-videos/ch3_train/'  # train
+    descriptors_path = 'extracted_descriptors/extracted_descriptors_'+ str(num_descriptors) + '_dist' # train
+
+annotations_paths = glob(gt_path + '*.xml')
+# annotations_path = ["datasets/rrc-text-videos/ch3_test/Video_49_6_4_GT.xml"]
+
+sampler = Sampler(weights_path='models/models_361_dropout/model-epoch-' + str(epoch_number) + '.pth', num_descriptors=num_descriptors,
                   hidden_size=256, input_size=6)
-# acc = mm.MOTAccumulator(auto_id=True)
+
+with open("results-" + str(num_descriptors) + "-" + str(epoch_number) + ".txt", "a") as f:
+    if is_test:
+        f.write("Results for test split\n")
+    else:
+        f.write("Results for train split\n")
 
 for annotations_path in annotations_paths:
     acc = mm.MOTAccumulator(auto_id=True)
 
-    print("Processing file ", annotations_path)
+    with open("results-" + str(num_descriptors) + "-" + str(epoch_number) + ".txt", "a") as f:
+        f.write("Results for file " + annotations_path + "\n")
+
     video_path = annotations_path.replace("_GT.xml", ".mp4")
     video_name = video_path.split('/')[-1].replace('.mp4', '')
-    voc_path = annotations_path.replace("GT.xml", "GT_voc.txt")  # test
-    # voc_path = annotations_path.replace("GT.xml", "GT.txt")  # train
+    if is_test:
+        voc_path = annotations_path.replace("GT.xml", "GT_voc.txt")  # test
+    else:
+        voc_path = annotations_path.replace("GT.xml", "GT_voc.txt")  # test
+        # voc_path = annotations_path.replace("GT.xml", "GT.txt")  # train
 
     cap = cv2.VideoCapture(video_path)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -64,7 +83,7 @@ for annotations_path in annotations_paths:
             predicted_bboxes_frame = []
             predicted_scores = []
             for j in range(descriptors.shape[1]):
-                if predictions[frame, j] > 0.33:
+                if predictions[frame, j] > 0.5:
                     center_x, center_y, w, h, p, _ = descriptors[frame, j]
                     center_x *= width
                     w *= width
@@ -85,18 +104,24 @@ for annotations_path in annotations_paths:
                 predicted_bboxes[i].append(list(tracked_prediction[0:4]))
                 predicted_ids[i].append(int(tracked_prediction[4]))
 
-    # for every video?
     get_metrics(predicted_bboxes, predicted_ids, annotations_path, acc)
     mh = mm.metrics.create()
-    summary = mh.compute_many(
-        [acc],
-        metrics=mm.metrics.motchallenge_metrics,
-        names=['full'])
 
-    strsummary = mm.io.render_summary(
-        summary,
-        formatters=mh.formatters,
-        namemap=mm.io.motchallenge_metric_names)
+    try:
+        summary = mh.compute_many(
+            [acc],
+            metrics=mm.metrics.motchallenge_metrics,
+            names=['full'])
 
-    print(strsummary)
+        strsummary = mm.io.render_summary(
+            summary,
+            formatters=mh.formatters,
+            namemap=mm.io.motchallenge_metric_names)
+
+        with open("results-" + str(num_descriptors) + "-" + str(epoch_number) + ".txt", "a") as f:
+            f.write(strsummary + '\n')
+    except:
+        with open("results-" + str(num_descriptors) + "-" + str(epoch_number) + ".txt", "a") as f:
+            f.write('woops\n')
+
 
