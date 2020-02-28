@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 
 from model import RNN
 from data_loader import get_data_loader
+from loss import Loss
 
 def main(args):
     if not os.path.exists('models'):
@@ -25,7 +26,8 @@ def main(args):
 
     # optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.mm)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
-    model_loss = torch.nn.BCEWithLogitsLoss()
+    # model_loss = torch.nn.BCEWithLogitsLoss()
+    model_loss = Loss()
 
     losses = []
     try:
@@ -56,12 +58,12 @@ def main(args):
             print('Total epoch loss: ' + str(loss_epoch_mean))
             if (epoch + 1) % args.save_epoch == 0 and epoch > 0:
                 filename = 'model-epoch-' + str(epoch + 1) + '.pth'
-                model_path = os.path.join('models', filename)
+                model_path = os.path.join('models/models_361_dropout', filename)
                 torch.save(model.state_dict(), model_path)
     except KeyboardInterrupt:
         pass
 
-    filename = 'model-epoch-last' + '.pth'
+    filename = 'model-epoch-last.pth'
     model_path = os.path.join('models', filename)
     torch.save(model.state_dict(), model_path)
     plt.plot(losses)
