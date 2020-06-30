@@ -25,7 +25,7 @@ def build_yolo_v2(inp, num_priors=5, num_classes=80):
         conv_biases  = tf.Variable(biases, name='ConvBiases')
     
         x = tf.pad(inp, [[0, 0], [pad, pad], [pad, pad], [0, 0]])
-        x = tf.nn.conv2d(x, conv_kernels, padding = 'VALID', strides = [1, 1, 1, 1])
+        x = tf.nn.conv2d(x, conv_kernels, padding = 'VALID', strides = [1, 1, 1, 1], name="daconv")
     
         if (moving_mean is not None) and (moving_variance is not None) and (gamma is not None):
             conv_bn_initializers = dict({'moving_mean': tf.constant_initializer(moving_mean),
@@ -41,7 +41,7 @@ def build_yolo_v2(inp, num_priors=5, num_classes=80):
         x = tf.nn.bias_add(x, conv_biases)
     
         if leaky:
-            x = tf.maximum(.1 * x, x)
+            x = tf.maximum(.1 * x, x, name="leaky")
     
         return x
     

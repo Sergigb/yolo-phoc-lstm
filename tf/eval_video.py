@@ -20,6 +20,13 @@ n_neighbors  = 10000
 model_input  = tf.placeholder(tf.float32, shape=(None,)+img_shape)
 model_output = build_yolo_v2(model_input, num_priors, phoc_size)
 
+import tensorflow.contrib.slim as slim
+model_vars = tf.trainable_variables()
+slim.model_analyzer.analyze_vars(model_vars, print_info=True)
+print('In  shape: '+str(model_input.get_shape()))
+print('Out shape: '+str(model_output.get_shape()))
+[print(n.name) for n in tf.get_default_graph().as_graph_def().node]
+
 init_op = tf.global_variables_initializer()
 saver = tf.train.Saver()
 
@@ -39,6 +46,14 @@ for query in [b'nuss']:
             inp_feed = np.expand_dims(img_preprocess(cv2.cvtColor(inp,cv2.COLOR_BGR2RGB), shape=img_shape, letterbox=True), 0)
             feed_dict = {model_input : inp_feed}
             out = sess.run(model_output, feed_dict)
+
+
+            # bn = tf.get_default_graph().get_tensor_by_name('YOLOv2/BatchNorm_21/gamma:0')
+            bn = tf.get_default_graph().get_tensor_by_name('YOLOv2/leaky_20:0')
+            bn_values = sess.run(bn, feed_dict)
+            np.save('tensor.npy', bn_values)
+            print(bn_values.shape)
+
             descriptors = out.reshape((-1,phoc_size+5))
             descriptors = expit(descriptors)
             valid_descriptors = descriptors[tuple(np.where(descriptors[:,4] > thresh)[0]), 5:]
@@ -96,7 +111,7 @@ for query in [b'nuss']:
                 cv2.circle(im, (30,30), 20, (0,0,255), -1)
                 cv2.putText(im,' '+str(query), (50,40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255),2)
             # cv2.imshow('Display',im)
-            print(im.shape)
+#             print(im.shape)
             vout.write(im)
             # cv2.waitKey(10)
             ret, inp = cap.read()

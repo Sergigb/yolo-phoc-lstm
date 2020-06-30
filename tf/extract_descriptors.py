@@ -15,8 +15,8 @@ num_priors   = 13
 priors       = np.array([(0.67, 0.35), (1.0, 0.52), (1.2, 1.0), (1.34, 0.33), (1.6, 0.58), (2.5, 0.45), (2.24, 0.8),
                          (3.7, 0.79), (3.0, 1.37), (6.0, 1.4), (4.75, 3.0), (10.3, 2.3), (12.0, 5.0)])
 phoc_size    = 604
-max_sequence_length = 100
-n_descriptors = 361  # 19*19
+max_sequence_length = 50
+n_descriptors = 361 # 22*22 # 361  # 19*19
 
 weights_path = './ckpt/yolo-phoc_175800.ckpt'
 model_input = tf.placeholder(tf.float32, shape=(None,)+img_shape)
@@ -27,13 +27,13 @@ saver = tf.train.Saver()
 
 trans = str.maketrans({'.': r'', '"': r'', '\n': r'', '-': r'', '\'': r''})
 
-is_test = False
+is_test = True
 
 if is_test:
-    descriptors_path = '../extracted_descriptors/extracted_descriptors_' + str(n_descriptors) + '_test'
+    descriptors_path = '../extracted_descriptors/extracted_descriptors_' + str(n_descriptors) + '_test_' + str(max_sequence_length)
     video_files_path = '../datasets/rrc-text-videos/ch3_test/'  # test
 else:
-    descriptors_path = '../extracted_descriptors/extracted_descriptors_' + str(n_descriptors)
+    descriptors_path = '../extracted_descriptors/extracted_descriptors_' + str(n_descriptors) + '_dist_' + str(max_sequence_length)
     video_files_path = '../datasets/rrc-text-videos/ch3_train/'  # train
 
 video_paths = glob.glob(video_files_path + '*.mp4')
@@ -53,23 +53,23 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
         words = set()
         descriptors = dict()
 
-        if not is_test:
-            gt_path = video_path.replace('.mp4', '_GT.txt')
-            with open(gt_path) as f:
-                lines = f.readlines()
-            for line in lines:
-                word = line.split(',')[-1]
-                word = str.encode(word.translate(trans).lower())
-                words.add(word)
-                descriptors[word] = []
-        else:
-            gt_path = video_path.replace('.mp4', '_GT_voc.txt')
-            with open(gt_path) as f:
-                lines = f.readlines()
-            for line in lines:
-                word = str.encode(line.translate(trans).lower())
-                words.add(word)
-                descriptors[word] = []
+        # if not is_test:
+        #     gt_path = video_path.replace('.mp4', '_GT.txt')
+        #     with open(gt_path) as f:
+        #         lines = f.readlines()
+        #     for line in lines:
+        #         word = line.split(',')[-1]
+        #         word = str.encode(word.translate(trans).lower())
+        #         words.add(word)
+        #         descriptors[word] = []
+        # else:
+        gt_path = video_path.replace('.mp4', '_GT_voc.txt')
+        with open(gt_path) as f:
+            lines = f.readlines()
+        for line in lines:
+            word = str.encode(line.translate(trans).lower())
+            words.add(word)
+            descriptors[word] = []
 
         cap = cv2.VideoCapture(video_path)
         ret, inp = cap.read()
