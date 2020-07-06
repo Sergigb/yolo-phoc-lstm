@@ -9,6 +9,22 @@ from sklearn.metrics import pairwise_distances
 import sys
 
 
+
+def iou(bbox1, bbox2):
+    x1 = max(bbox1[0], bbox2[0])
+    y1 = max(bbox1[1], bbox2[1])
+    x2 = min(bbox1[2], bbox2[2])
+    y2 = min(bbox1[3], bbox2[3])
+
+    intersection = max(0, x2 - x1) * max(0, y2 - y1)
+
+    bbox1area = (bbox1[2] - bbox1[0]) * (bbox1[3] - bbox1[1])
+    bbox2area = (bbox2[2] - bbox2[0]) * (bbox2[3] - bbox2[1])
+
+    iou_score = intersection / float((bbox1area + bbox2area) - intersection)
+    return iou_score
+
+
 build_phoc = import_cphoc()
 img_shape    = (608, 608, 3)
 num_priors   = 13
@@ -16,7 +32,7 @@ priors       = np.array([(0.67, 0.35), (1.0, 0.52), (1.2, 1.0), (1.34, 0.33), (1
                          (3.7, 0.79), (3.0, 1.37), (6.0, 1.4), (4.75, 3.0), (10.3, 2.3), (12.0, 5.0)])
 phoc_size    = 604
 max_sequence_length = 50
-n_descriptors = 361 # 22*22 # 361  # 19*19
+att_size = 38
 
 weights_path = './ckpt/yolo-phoc_175800.ckpt'
 model_input = tf.placeholder(tf.float32, shape=(None,)+img_shape)
@@ -27,22 +43,21 @@ saver = tf.train.Saver()
 
 trans = str.maketrans({'.': r'', '"': r'', '\n': r'', '-': r'', '\'': r''})
 
-is_test = True
+is_test = False
 
 if is_test:
-    descriptors_path = '../extracted_descriptors/extracted_descriptors_' + str(n_descriptors) + '_test_' + str(max_sequence_length) + "_v2"
+    masks_path = '../tensors/test'
     video_files_path = '../datasets/rrc-text-videos/ch3_test/'  # test
 else:
-    descriptors_path = '../extracted_descriptors/extracted_descriptors_' + str(n_descriptors) + '_train_' + str(max_sequence_length) + "_v2"
+    masks_path = '../tensors/train'
     video_files_path = '../datasets/rrc-text-videos/ch3_train/'  # train
 
 video_paths = glob.glob(video_files_path + '*.mp4')
-# video_paths = ['../datasets/rrc-text-videos/ch3_train/Video_10_1_1.mp4']
-
-if not os.path.isdir(descriptors_path):
-    os.mkdir(descriptors_path)
+#video_paths = ['../datasets/rrc-text-videos/ch3_train/Video_45_6_4.mp4']
 
 gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.5)
+
+step = 1 / att_size
 
 with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
     print_info('Loading weights...')
@@ -51,25 +66,16 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
     for video_path in video_paths:
         print('Processing file ' + video_path)
         words = set()
-        descriptors = dict()
+        masks = dict()
 
-        # if not is_test:
-        #     gt_path = video_path.replace('.mp4', '_GT.txt')
-        #     with open(gt_path) as f:
-        #         lines = f.readlines()
-        #     for line in lines:
-        #         word = line.split(',')[-1]
-        #         word = str.encode(word.translate(trans).lower())
-        #         words.add(word)
-        #         descriptors[word] = []
-        # else:
         gt_path = video_path.replace('.mp4', '_GT_voc.txt')
         with open(gt_path) as f:
             lines = f.readlines()
         for line in lines:
             word = str.encode(line.translate(trans).lower())
             words.add(word)
-            descriptors[word] = []
+            masks[word] = []
+        #words = [b"caprabo"]
 
         cap = cv2.VideoCapture(video_path)
         ret, inp = cap.read()
@@ -91,8 +97,8 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
 
             for i in range(out.shape[1]):
                 for j in range(out.shape[2]):
-                    max_q = 0.0
-                    max_q_descriptor = None
+                    max_o = 0.0
+                    max_o_descriptor = None
 
                     col = float(j)
                     row = float(i)
@@ -103,9 +109,9 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
                         out[0, i, j, index + 4:index + phoc_size + 5] = \
                             expit(out[0, i, j, index + 4:index + phoc_size + 5])
 
-                        if out[0, i, j, index+4] <  max_q:
+                        if out[0, i, j, index+4] <  max_o:
                             continue
-                        max_q = out[0, i, j, index+4]
+                        max_o = out[0, i, j, index+4]
 
                         if img_h > img_w: print("height is bigger than width")
 
@@ -116,19 +122,35 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
                         out[0, i, j, index + 2] = (np.exp(out[0, i, j, index + 2]) * priors[a, 0] / w)
                         out[0, i, j, index + 3] = (np.exp(out[0, i, j, index + 3]) * priors[a, 1] / h) * ar
 
-                        max_q_descriptor = out[0, i, j, index:index + phoc_size + 5]
-                    descriptors_frame.append(max_q_descriptor)
+                        max_o_descriptor = out[0, i, j, index:index + phoc_size + 5]
+                    descriptors_frame.append(max_o_descriptor)
 
             descriptors_frame = np.array(descriptors_frame)
-            # out = out.reshape((-1, phoc_size + 5))
-            # out = out[out[:, 4].argsort()[::-1]]  # keep the top n descriptors sorted by the objectness
-            # out = out[0:n_descriptors, :]
 
             for word in words:
                 q = np.array(build_phoc(word)).reshape(1, -1)
                 distances = pairwise_distances(descriptors_frame[:, 5:], q, metric='cosine')
-                descriptor = np.concatenate((descriptors_frame[:, :5], distances), axis=1)
-                descriptors[word].append(descriptor)
+                descriptor = np.concatenate((descriptors_frame[:, :5], distances), axis=1)  # not needed, we can work on distances and descriptors without concat
+                mask = np.zeros((att_size, att_size))
+
+                valid_desc = descriptor[(descriptor[:, 4] > 0.25) & (descriptor[:, 5] < 0.5)]
+
+                # this is disgusting
+                if(len(valid_desc)):
+                    for k in range(valid_desc.shape[0]):
+                        temp_mask = np.zeros((att_size, att_size))
+                        bbox = [valid_desc[k, 0] - (valid_desc[k, 2] / 2), valid_desc[k, 1] - (valid_desc[k, 2] / 2),\
+                                valid_desc[k, 0] + (valid_desc[k, 2] / 2), valid_desc[k, 1] + (valid_desc[k, 2] / 2)]
+
+                        for i in range(0, att_size):
+                            for j in range(0, att_size):
+                                x = i * step
+                                y = j * step
+                                if iou([x, y, x+step, y+step], bbox):
+                                    temp_mask[j, i] = valid_desc[k, 4] # objectness??? why not
+                        mask = np.maximum(mask, temp_mask)
+
+                masks[word].append(mask)
 
             sys.stdout.write('\rProgress: ' + str(frame) + '/' + str(int(cap.get(cv2.CAP_PROP_FRAME_COUNT))))
             sys.stdout.flush()
@@ -137,28 +159,24 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
         print('')
 
         video_fname = video_path.split('/')[-1].replace('.mp4', '')
-        for key in descriptors.keys():
-            descriptors_key = np.array([descriptors[key]])
-            num_frames = descriptors_key.shape[1]
+        for key in masks.keys():
+            masks_key = np.array([masks[key]])
+            num_frames = masks_key.shape[1]
             for index in range(int(num_frames/max_sequence_length)):
-                descriptors_sequence = descriptors_key[:, max_sequence_length*index:max_sequence_length*(index+1)]
-                #print(descriptors_sequence.shape)
-                shape = descriptors_sequence.shape
-                #descriptors_sequence = descriptors_sequence.reshape(shape[0], shape[1], shape[2]*shape[3]) #old
+                masks_sequence = masks_key[:, max_sequence_length*index:max_sequence_length*(index+1)]
+                shape = masks_sequence.shape
 
-                filename = 'descriptors_top' + str(n_descriptors) + '_' + video_fname + '_' + key.decode('utf-8') \
+                filename = 'mask_' + video_fname + '_' + key.decode('utf-8') \
                            + '_' + str((max_sequence_length * index) + 1).zfill(6) + '.npy'
-                np.save(os.path.join(descriptors_path, filename), descriptors_sequence)
+                np.save(os.path.join(masks_path, filename), masks_sequence)
 
             if num_frames % max_sequence_length:
-                descriptors_sequence = descriptors_key[:, max_sequence_length * int(num_frames/max_sequence_length):]
-                shape = descriptors_sequence.shape
-                #descriptors_sequence = descriptors_sequence.reshape(shape[0], shape[1], shape[2]*shape[3]) #old
-                #pad = np.zeros((1, max_sequence_length - shape[1], shape[2]*shape[3])) #old
+                masks_sequence = masks_key[:, max_sequence_length * int(num_frames/max_sequence_length):]
+                shape = masks_sequence.shape
                 pad = np.zeros((1, max_sequence_length - shape[1], shape[2], shape[3]))
-                descriptors_sequence = np.concatenate((descriptors_sequence, pad), axis=1)
+                masks_sequence = np.concatenate((masks_sequence, pad), axis=1)
 
-                filename = 'descriptors_top' + str(n_descriptors) + '_'  + video_fname + '_' + key.decode('utf-8') \
+                filename = 'mask_' + video_fname + '_' + key.decode('utf-8') \
                            + '_' + str((max_sequence_length * int(num_frames/max_sequence_length)) + 1).zfill(6) + '.npy'
-                np.save(os.path.join(descriptors_path, filename), np.array(descriptors_sequence))
+                np.save(os.path.join(masks_path, filename), np.array(masks_sequence))
 

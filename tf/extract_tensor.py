@@ -49,6 +49,7 @@ with tf.Session() as sess:
 
     for file_ in files:
         video_name = file_.split("/")[-1].replace(".mp4", "")
+        print(video_name)
 
         cap = cv2.VideoCapture(file_)
         for i in range(1):
@@ -57,22 +58,17 @@ with tf.Session() as sess:
         num_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
         tensors_all = []
-        descriptors_all = []
         while(ret):
             frame_num = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
 
             inp_feed = np.expand_dims(img_preprocess(cv2.cvtColor(inp,cv2.COLOR_BGR2RGB), shape=img_shape, letterbox=True), 0)
             feed_dict = {model_input : inp_feed}
             out = sess.run(model_output, feed_dict)
-            descriptors = out.reshape((-1,phoc_size+5))
-            descriptors = descriptors[: , 0:5]
-            descriptors = descriptors.flatten()
-            descriptors_all.append(descriptors)
 
             # bn = tf.get_default_graph().get_tensor_by_name('YOLOv2/BatchNorm_21/gamma:0')
             leaky_20 = tf.get_default_graph().get_tensor_by_name('YOLOv2/leaky_20:0')
             tensor = sess.run(leaky_20, feed_dict)
-            tensors_all.append(tensor.squeeze(0))
+            tensors_all.append(tensor.flatten())
 
             sys.stdout.write("\r" + str(frame_num) + '/' + str(num_frames))
             sys.stdout.flush()
@@ -80,17 +76,12 @@ with tf.Session() as sess:
             ret, inp = cap.read()
         print("")
         tensors_all = np.array(tensors_all)
-        descriptors_all = np.array(descriptors_all)
 
         for index in range(int(num_frames/max_sequence_length)):
             tensor_sequence = tensors_all[max_sequence_length*index:max_sequence_length*(index+1), :]
-            descriptors_sequence = descriptors_all[max_sequence_length*index:max_sequence_length*(index+1), :]
 
             filename = 'tensor_' + video_name + '_' + str((max_sequence_length * index) + 1).zfill(6) + '.npy'
-            np.save(os.path.join(tensors_path, filename), tensor_sequence)
-
-            filename = 'descriptors_' + video_name + '_' + str((max_sequence_length * index) + 1).zfill(6) + '.npy'
-            np.save(os.path.join(tensors_path, filename), descriptors_sequence)
+            #np.save(os.path.join(tensors_path, filename), tensor_sequence)
 
         if num_frames % max_sequence_length:
             tensor_sequence = tensors_all[max_sequence_length * int(num_frames/max_sequence_length):, :]
@@ -98,7 +89,5 @@ with tf.Session() as sess:
             tensor_sequence = np.concatenate((tensor_sequence, pad), axis=0)
 
             filename = 'tensor_' + video_name + '_' + str((max_sequence_length * int(num_frames/max_sequence_length)) + 1).zfill(6) + '.npy'
-            np.save(os.path.join(tensors_path, filename), tensor_sequence)
+            #np.save(os.path.join(tensors_path, filename), tensor_sequence)
 
-            filename = 'descriptors_' + video_name + '_' + str((max_sequence_length * int(num_frames/max_sequence_length)) + 1).zfill(6) + '.npy'
-            np.save(os.path.join(tensors_path, filename), descriptors_sequence)

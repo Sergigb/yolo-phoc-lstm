@@ -11,17 +11,20 @@ import numpy as np
 import xml.etree.cElementTree as ET
 import cv2
 import matplotlib.pyplot as plt
+import matplotlib.patches as pat
 
 from utils import trans, iou
 
 
 dataset_path = "../datasets/rrc-text-videos/ch3_train/"
 annotations_paths = glob.glob(dataset_path + "*.xml")
-#annotations_paths = ['../datasets/rrc-text-videos/ch3_train/Video_16_3_2_GT.xml']
+#annotations_paths = ['../datasets/rrc-text-videos/ch3_train/Video_45_6_4_GT.xml']
+
 random.shuffle(annotations_paths)
 
 max_sequence_length = 50
-empty_gt = np.zeros((max_sequence_length, 32, 32))
+att_size = 38
+empty_gt = np.zeros((max_sequence_length, att_size, att_size))
 num_descriptors = 361
 
 
@@ -42,8 +45,8 @@ for annotations_path in annotations_paths:
 
     print(video_path)
 
-    step_x = int(ceil(video_width/32))
-    step_y = int(ceil(video_height/32))
+    step_x = int(ceil(video_width/att_size))
+    step_y = int(ceil(video_height/att_size))
 
     tree = ET.parse(annotations_path)
     root = tree.getroot()
@@ -59,10 +62,13 @@ for annotations_path in annotations_paths:
     for word in vocabulary:
         max_instances_frame = 0 # max number of instances of the same word in a single frame
         gt = copy.deepcopy(empty_gt)
+        bbox_temp = []
+        for i in range(max_sequence_length): bbox_temp.append([0, 0, 0, 0])
 
         frame_num = 0
         for frame in root:
             frame_num = int(frame.get("ID"))
+            #print(frame_num)
             
             instances_frame = 0
             for object_ in frame:
@@ -82,10 +88,10 @@ for annotations_path in annotations_paths:
 
                     for i in range(0, int(video_width), step_x):
                         for j in range(0, int(video_height), step_y):
-                            if iou([i, j, i+32, j+32], [x1, y1, x2, y2]):
-                                #print(video_width, video_height, step_x, step_y, i, j, int(i/step_x), int(j/step_y))
-                                #print([i, j, i+32, j+32], [x1, y1, x2, y2])
-                                gt[(frame_num-1) % max_sequence_length, int(j/step_y), int(i/step_x)] = 1  # swapped because fuck me if I know
+                            if iou([i, j, i+step_x, j+step_y], [x1, y1, x2, y2]):
+                                gt[(frame_num-1) % max_sequence_length, int(j/step_y), int(i/step_x)] = 1  # i-j swapped because fuck me if I know
+                    
+                    bbox_temp[(frame_num-1) % max_sequence_length] = [x1, y1, x2-x1, y2-y1]
                     #1280.0 960.0
 
             if instances_frame > max_instances_frame:
@@ -99,49 +105,62 @@ for annotations_path in annotations_paths:
                         np.save(f, gt)
 
                     labels[fname] = ["tensor_" + video_name + "_{:06d}".format(int(frame_num) - max_sequence_length) + ".npy",
-                                     "descriptors_" + video_name + "_{:06d}".format(int(frame_num) - max_sequence_length) + ".npy",
-                                     "../phocs/" + word + ".npy"]
-
-
-                    #fig, ax = plt.subplots(1, figsize=(15,15))
-                    #cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num-max_sequence_length);
-                    #print(word, frame_num-max_sequence_length)
-                    #for i in range(max_sequence_length):
-                    #    ret, inp = cap.read()
-                    #    if not ret:
-                    #        continue
-
-                        #im = cv2.cvtColor(inp, cv2.COLOR_BGR2RGB)
-
-                        #plt.cla()
-                        #ax.imshow(im)
-
-                        #resized = cv2.resize(gt[i, :, :], (int(video_width), int(video_height)), interpolation = cv2.INTER_AREA) 
-                        #resized.swapaxes(0, 1)
-                        #ax.imshow(resized, cmap='jet', alpha=0.5)
-                        #plt.axis('off')
-                        #plt.show(block=False)
-                        #plt.pause(0.0001)
-                    #plt.close()
+                                     "mask_" + video_name + "_" + word + "_{:06d}".format(int(frame_num) - max_sequence_length) + ".npy"]
 
                 gt = copy.deepcopy(empty_gt)
+                for i in range(max_sequence_length): bbox_temp[i] = [0, 0, 0, 0]
                 max_instances_frame = 0
 
         if (frame_num) % max_sequence_length:
             #print(frame_num, (frame_num - 1) % max_sequence_length, int(frame_num) - int(frame_num) % max_sequence_length + 1)
             if max_instances_frame == 1:
                 fname = ("gt_" + video_name + "_" + word + "_{:06d}".format(int(frame_num) - int(frame_num) % max_sequence_length + 1)) + ".npy"
+                gt = gt.reshape((max_sequence_length, -1))
                 with open(os.path.join("gt", fname), 'wb') as f:
                     np.save(f, gt)
 
                 labels[fname] = ["tensor_" + video_name + "_{:06d}".format(int(frame_num) - int(frame_num) % max_sequence_length + 1) + ".npy",
-                                 "descriptors_" + video_name + "_{:06d}".format(int(frame_num) - int(frame_num) % max_sequence_length + 1) + ".npy",
-                                 "../phocs/" + word + ".npy"]
-           
+                                 "mask_" + video_name + "_" + word + "_{:06d}".format(int(frame_num) - int(frame_num) % max_sequence_length + 1) + ".npy"]
+
             gt = copy.deepcopy(empty_gt)
+            for i in range(max_sequence_length): bbox_temp[i] = [0, 0, 0, 0]
             max_instances_frame = 0
 print(len(labels.keys()))
+
 with open("gt/labels.json", 'w') as f:
     json.dump(labels, f)
 
+
+
+
+
+
+
 #print("----->", "gt", (video_name + "_gt_" + word + "_{:05d}".format(int(frame_num))) + ".np", frame_num) 
+
+
+"""fig, ax = plt.subplots(1, figsize=(15,15))
+cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num-max_sequence_length-1);
+print(word, frame_num-max_sequence_length-1)
+
+for i in range(max_sequence_length):
+    bbox = bbox_temp[i]
+    rect = pat.Rectangle((bbox[0], bbox[1]), bbox[2], bbox[3] ,linewidth=1,edgecolor='r',facecolor='none')
+
+    ret, inp = cap.read()
+    if not ret:
+        continue
+
+    im = cv2.cvtColor(inp, cv2.COLOR_BGR2RGB)
+
+    plt.cla()
+    ax.imshow(im)
+
+    resized = cv2.resize(gt[i, :, :], (int(video_width), int(video_height)), interpolation = cv2.INTER_AREA) 
+    resized.swapaxes(0, 1)
+    ax.imshow(resized, cmap='jet', alpha=0.5)
+    ax.add_patch(rect)
+    plt.axis('off')
+    plt.show(block=False)
+    plt.pause(0.001)
+plt.close()"""

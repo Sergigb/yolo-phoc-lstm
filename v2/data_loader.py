@@ -22,16 +22,16 @@ class yolo_phoc_dataset(data.Dataset):
 
         gt = torch.from_numpy(np.load(key_path)).type(torch.FloatTensor)
         tensor = np.load(os.path.join(self.tensors_path, tensor_fname))
-        tensor = tensor.swapaxes(1,3).swapaxes(2,3)  # not sure if this is right
-        tensor = torch.from_numpy(tensor).type(torch.FloatTensor)
+        #tensor = tensor.swapaxes(1,3).swapaxes(2,3)  # not sure if this is right
+        #tensor = torch.from_numpy(tensor).type(torch.FloatTensor)
 
-        phoc = np.load(phoc_path)
+        #phoc = np.load(phoc_path)
         descriptor =  np.load(os.path.join(self.tensors_path, descriptor_fname))
 
-        new_descriptor = []
-        for i in range(descriptor.shape[0]):
-            new_descriptor.append(np.concatenate((descriptor[i], phoc.squeeze(0))))
-        descriptor = torch.from_numpy(np.array(new_descriptor)).type(torch.FloatTensor)
+        #new_descriptor = []
+        #for i in range(descriptor.shape[0]):
+        #    new_descriptor.append(np.concatenate((descriptor[i], phoc.squeeze(0))))
+        #descriptor = torch.from_numpy(np.array(new_descriptor)).type(torch.FloatTensor)
 
         return tensor, descriptor, gt
 
