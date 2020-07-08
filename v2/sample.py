@@ -1,4 +1,5 @@
 import glob
+import os
 import numpy as np
 import torch
 from model import RNN
@@ -6,55 +7,41 @@ import cv2
 import matplotlib.pyplot as plt
 import matplotlib.patches as pat
 
-weights_path = "models/best/model-epoch-6.pth"
+#weights_path = "models/best/model-epoch-62-small.pth"
+weights_path = "models/model-epoch-20.pth"
 
-model = RNN(sequence_length=550)
+model = RNN(lstm_hidden_size=512)
 model.cuda()
 model.eval()
 model.load_state_dict(torch.load(weights_path))
 
-video_path = "../datasets/rrc-text-videos/ch3_train/Video_41_2_3.mp4"
+video_path = "../datasets/rrc-text-videos/ch3_train/Video_45_6_4.mp4"
 video_name = video_path.split("/")[-1].replace(".mp4", "")
+mask_size = 38
 
-tensor_files = glob.glob("../tensors/train/tensor_" + video_name + "*")
-tensor_files.sort()
+descriptor_mask = [torch.from_numpy(np.load("../tensors/train/mask_Video_45_6_4_caprabo_000151.npy")).type(torch.FloatTensor).cuda(),\
+                   torch.from_numpy(np.load("../tensors/train/mask_Video_45_6_4_caprabo_000201.npy")).type(torch.FloatTensor).cuda()]
 
-tensors = None
-for file in tensor_files:
-    if tensors is None:
-        tensors = np.load(file).squeeze()
-    else:
-        tensors = np.concatenate((tensors, np.load(file).squeeze()))
-tensors = tensors.swapaxes(1,3).swapaxes(2,3)
-tensors = torch.from_numpy(tensors).type(torch.FloatTensor).cuda()
+tensors = [torch.from_numpy(np.load("../tensors/train/tensor_Video_45_6_4_000151.npy")).type(torch.FloatTensor).unsqueeze(0).cuda(),
+           torch.from_numpy(np.load("../tensors/train/tensor_Video_45_6_4_000201.npy")).type(torch.FloatTensor).unsqueeze(0).cuda()]
 
-descriptor_files = glob.glob("../tensors/train/descriptors_" + video_name + "*")
-descriptor_files.sort()
+for i, mask in enumerate(descriptor_mask):
+    descriptor_mask[i] = mask.reshape((mask.shape[0], mask.shape[1], -1))
 
-descriptors = None
-for file in descriptor_files:
-    if descriptors is None:
-        descriptors = np.load(file).squeeze()
-    else:
-        descriptors = np.concatenate((descriptors, np.load(file).squeeze()))
+out = []
+import sys
+for i in range(len(tensors)):
+    t = model(tensors[i], descriptor_mask[i])
+    out.append(t)
 
-phoc_tensor = np.load("../phocs/look.npy")
+out = torch.stack(out, dim=1)
+out = out.reshape((*out.shape[0:3], mask_size, mask_size))
+out = out.squeeze().detach().cpu().numpy()
+out = out.reshape((out.shape[0] * out.shape[1], *out.shape[2:]))
 
-descriptors_phoc = []
-for i in range(descriptors.shape[0]):
-    descriptors_phoc.append(np.concatenate((descriptors[i], phoc_tensor.squeeze(0))))
-
-descriptors = np.array(descriptors_phoc)
-descriptors = torch.from_numpy(descriptors).type(torch.FloatTensor).cuda()
-
-out = model(tensors.unsqueeze(0), descriptors.unsqueeze(0))
-
-print(out.shape)
-
-
-
+### plot
 cap = cv2.VideoCapture(video_path)
-ret, inp = cap.read()
+cap.set(cv2.CAP_PROP_POS_FRAMES, 150.);
 
 fig, ax = plt.subplots(1, figsize=(15,15))
 ret, inp = cap.read()
@@ -63,37 +50,24 @@ frame = 0
 width  = cap.get(cv2.CAP_PROP_FRAME_WIDTH)
 height = cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
 
-while ret:
-    print(frame)
+for i in range(100):
     im = cv2.cvtColor(inp, cv2.COLOR_BGR2RGB)
     plt.cla()
     ax.imshow(im)
 
-    center_x, center_y, w, h, o = out[0, frame-1]
-
-    center_x *= width
-    w *= width
-    center_y *= height
-    h *= height
-    x = center_x - w / 2.
-    y = center_y - h / 2.
-
-    rect = pat.Rectangle((x, y), abs(w), abs(h), linewidth=1, edgecolor=(1, 0, 0), facecolor='none')
-    #plt.text(x1, y1, int(boxid), color=(0, 1, 0), fontsize=20)
-    #plt.text(x1, y2+15, detection[1], color=(1, 0, 0), fontsize=20)
-    ax.add_patch(rect)
-
-    print(x.detach().cpu().numpy(), y.detach().cpu().numpy(), w.detach().cpu().numpy(), h.detach().cpu().numpy(), out[0, frame-1].detach().cpu().numpy())
+    resized_mask = cv2.resize(out[frame, :, :], (int(width), int(height)), interpolation = cv2.INTER_AREA)
+    print(np.sum(out[frame, :, :]))
+    ax.imshow(resized_mask, cmap='jet', alpha=0.5) #, vmin=0, vmax=1)
 
     plt.axis('off')
-    # plt.show(block=False)
-    # plt.pause(0.00001)
+#    plt.show(block=False)
+#    plt.pause(0.00001)
     plt.savefig('images/file%05d.jpeg' % frame, bbox_inches = 'tight', pad_inches = 0)
 
     frame += 1
     ret, inp = cap.read()
 plt.close()
-os.system("ffmpeg -framerate 20 -pattern_type glob -i 'images/*.jpeg' -c:v mpeg4 -vb 1M -qscale:v 2 " + video_name + ".mp4")
+os.system("ffmpeg -framerate 20 -pattern_type glob -i 'images/*.jpeg' -c:v mpeg4 -vb 1M -qscale:v 2 " + "full-notnorm.mp4")
 
 
 

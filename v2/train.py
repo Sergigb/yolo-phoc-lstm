@@ -19,12 +19,12 @@ def main(args):
     learning_rate = args.lr
 
     data_loader = get_data_loader(args.gt_path, args.tensors_path, args.json_labels_path, args.bs)
-    model = RNN()
+    model = RNN(lstm_hidden_size=args.hidden_size)
     if torch.cuda.is_available():
         model.cuda()
     model.train()
 
-    # optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.mm)
+    #optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.mm)
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     model_loss = torch.nn.BCEWithLogitsLoss()
     # model_loss = Loss()
@@ -38,15 +38,15 @@ def main(args):
                     param_group['lr'] = learning_rate
 
             loss_epoch = []
-            for step, (tensors, descriptors, labels) in enumerate(data_loader):
+            for step, (tensors, masks, gt) in enumerate(data_loader):
                 if torch.cuda.is_available():
-                    descriptors = descriptors.cuda()
                     tensors = tensors.cuda()
-                    labels = labels.cuda()
+                    masks = masks.cuda()
+                    gt = gt.cuda()
                 model.zero_grad()
 
-                out = model(tensors, descriptors)
-                loss = model_loss(out, labels)
+                out = model(tensors, masks)
+                loss = model_loss(out, gt)
                 loss.backward()
                 optimizer.step()
 
@@ -104,3 +104,5 @@ if __name__ == '__main__':
 
     main(args)
 
+# adam default everything 0.040837266 (10)
+# adam lr 1e-2 0.0333 (6)

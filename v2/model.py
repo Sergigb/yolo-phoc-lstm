@@ -1,39 +1,55 @@
 import torch
+import sys
 
 
 class RNN(torch.nn.Module):
-    def __init__(self, num_descriptors=361, descriptor_size=6, lstm_in_size=29845, lstm_hidden_size=1024, sequence_length=50):
+    def __init__(self, lstm_in_size=93860, lstm_hidden_size=1024, sequence_length=50, att_size=38):
         super(RNN, self).__init__()
-        self.w2 = torch.nn.Linear(lstm_hidden_size, 5)
-        self.lstmcell = torch.nn.LSTMCell(lstm_in_size, lstm_hidden_size)
+        #self.w2 = torch.nn.Linear(lstm_hidden_size, 5)
+        self.att_size = att_size
         self.hidden_size = lstm_hidden_size
         self.sequence_length = sequence_length
+
+        self.lstmcell = torch.nn.LSTMCell(lstm_in_size, lstm_hidden_size)
+        self.h_to_att = torch.nn.Linear(lstm_hidden_size, att_size * att_size)
+        self.h_to_out = torch.nn.Linear(lstm_hidden_size, att_size * att_size)
         self.sigmoid = torch.nn.Sigmoid()
+        self.relu = torch.nn.ReLU()
 
 
-        self.conv = torch.nn.Conv2d(in_channels=64, out_channels=16, kernel_size=3, stride=2, padding=1)
-
-    def forward(self, tensors, descriptors):
+    def forward(self, tensors, masks):
         """
-        :param descriptors: [bs, sequence length, num descriptors, size descriptors]
-        :return: attention mask over the descriptors
+        
         """
 
-        h_t = torch.zeros((descriptors.shape[0], self.hidden_size)).cuda()
-        c_t = torch.zeros((descriptors.shape[0], self.hidden_size)).cuda()
-        out = torch.zeros((descriptors.shape[0], self.sequence_length, 5)).cuda()
+        h_t = torch.zeros((tensors.shape[0], self.hidden_size)).cuda()
+        c_t = torch.zeros((tensors.shape[0], self.hidden_size)).cuda()
+        conv_att_t = torch.zeros((tensors.shape[0], self.att_size, self.att_size)).cuda()  # we only keep current one for now
+        out = torch.zeros((tensors.shape[0], self.sequence_length, self.att_size * self.att_size)).cuda()
 
         for i in range(self.sequence_length):
-            visual_features = self.conv(tensors[:, i])
-            visual_features = visual_features.reshape((visual_features.shape[0], -1))
-            input_t = torch.cat((descriptors[:, i], visual_features), dim=1)
+
+            tensors_slice_t = torch.zeros((tensors.shape[0], *tensors.shape[-3:])).cuda()
+            for j in range(tensors.shape[0]):
+                tensors_slice_t[j] = tensors[j, i, :] * conv_att_t[j, :].unsqueeze(-1)  # apply attention
+
+            input_tensor = tensors_slice_t.reshape(tensors_slice_t.shape[0], -1)
+            input_mask = masks[:, i, :]
+            input_t = torch.cat((input_tensor, input_mask), dim=1)
+            #input_t = input_mask
 
             h_t, c_t = self.lstmcell(input_t, (h_t, c_t))
-            out[:, i, :] = self.w2(h_t)
+
+            h_t_ReLU = self.relu(h_t)
+            conv_att_t = self.h_to_att(h_t_ReLU)
+            conv_att_t = self.sigmoid(conv_att_t)
+            conv_att_t = conv_att_t.reshape(conv_att_t.shape[0], self.att_size, self.att_size)
+
+
+            out[:, i, :] = self.h_to_out(h_t_ReLU)
 
         if not self.training:
-            print("sigmoiding")
-            a = self.sigmoid(out)
+            out = self.sigmoid(out)
 
         return out
 
