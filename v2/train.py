@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 
 import torch
 import torch.optim as optim
@@ -11,6 +12,8 @@ from data_loader import get_data_loader
 from loss import Loss
 
 def main(args):
+    print(sys.argv)
+
     if not os.path.exists('models'):
         os.mkdir('models')
 
@@ -25,11 +28,15 @@ def main(args):
     model.train()
 
     #optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.mm)
-    optimizer = optim.Adam(model.parameters(), lr=args.lr)
+    if args.rms:
+        optimizer = optim.RMSprop(model.parameters(), lr=args.lr, momentum=args.mm)
+    else:
+        optimizer = optim.Adam(model.parameters(), lr=args.lr)
     model_loss = torch.nn.BCEWithLogitsLoss()
     # model_loss = Loss()
 
     losses = []
+    p = 1
     try:
         for epoch in range(num_epochs):
             if epoch % args.decay_epoch == 0 and epoch > 0:
@@ -37,7 +44,17 @@ def main(args):
                 for param_group in optimizer.param_groups:
                     param_group['lr'] = learning_rate
 
+            if epoch in (3, 7, 15):
+                if epoch == 3:
+                    p = 2 / 3
+                if epoch == 7:
+                    p = 1 / 3
+                if epoch == 15:
+                    p = 0
+
             loss_epoch = []
+            loss1_epoch = []
+            loss2_epoch = []
             for step, (tensors, masks, gt) in enumerate(data_loader):
                 if torch.cuda.is_available():
                     tensors = tensors.cuda()
@@ -45,18 +62,27 @@ def main(args):
                     gt = gt.cuda()
                 model.zero_grad()
 
-                out = model(tensors, masks)
-                loss = model_loss(out, gt)
+                out, att = model(tensors, masks, gt, p)
+                loss1 = model_loss(out, gt)
+                # att[:, :-1, :] -> attention produced (location in the next frame) until the last frame -1 (49)
+                # gt[:, 1:, :] -> gt from the second frame until the last frame (49)
+                loss2 = model_loss(att[:, :-1, :], gt[:, 1:, :])
+                loss = loss1 + loss2
                 loss.backward()
                 optimizer.step()
 
                 loss_epoch.append(loss.cpu().detach().numpy())
+                loss1_epoch.append(loss1.cpu().detach().numpy())
+                loss2_epoch.append(loss2.cpu().detach().numpy())
 
-                print('Epoch ' + str(epoch + 1) + '/' + str(num_epochs) + ' - Step ' + str(step + 1) + '/' +
-                      str(len(data_loader)) + ' - Loss: ' + str(float(loss)))
+                #print('Epoch ' + str(epoch + 1) + '/' + str(num_epochs) + ' - Step ' + str(step + 1) + '/' +
+                #      str(len(data_loader)) + ' - Loss: ' + str(float(loss)) + " (Loss1: " + str(float(loss1))
+                #       + ", Loss2: " + str(float(loss2)) + ")")
             loss_epoch_mean = np.mean(np.array(loss_epoch))
+            loss1_epoch_mean = np.mean(np.array(loss_epoch))
+            loss2_epoch_mean = np.mean(np.array(loss_epoch))
             losses.append(loss_epoch_mean)
-            print('Total epoch loss: ' + str(loss_epoch_mean))
+            print('Total epoch loss: ' + str(loss_epoch_mean) + " (loss1: " + str(loss1_epoch_mean) + ", loss2: " + str(loss2_epoch_mean) + ")")
             if (epoch + 1) % args.save_epoch == 0 and epoch > 0:
                 filename = 'model-epoch-' + str(epoch + 1) + '.pth'
                 model_path = os.path.join('models/', filename)
@@ -98,6 +124,10 @@ if __name__ == '__main__':
                         help='Size of the hidden state of the lstm')
     parser.add_argument('--input_size', type=int, default=256,
                         help='Input size to the next step of the lstm')
+    parser.add_argument('--seq_length', type=int, default=50,
+                        help='Lenght of the sequences')
+    parser.add_argument('-rms', action='store_true',
+                        help='RMSProp option')
     # not used
     parser.add_argument('--clipping', type=float, default=0., help='Gradient clipping')
     args = parser.parse_args()

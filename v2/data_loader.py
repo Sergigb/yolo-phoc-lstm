@@ -24,6 +24,7 @@ class yolo_phoc_dataset(data.Dataset):
         gt_path = os.path.join(self.gt_root, self.keys[index])
 
         tensors = torch.from_numpy(np.load(tensors_path)).type(torch.FloatTensor)
+        tensors = tensors.permute(0, 3, 1, 2)
         masks = np.load(masks_path).squeeze()
         masks = torch.from_numpy(masks.reshape(masks.shape[0], -1)).type(torch.FloatTensor)
         gt = torch.from_numpy(np.load(gt_path)).type(torch.FloatTensor)
