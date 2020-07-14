@@ -133,7 +133,7 @@ with tf.Session(config=tf.ConfigProto(gpu_options=gpu_options)) as sess:
                 descriptor = np.concatenate((descriptors_frame[:, :5], distances), axis=1)  # not needed, we can work on distances and descriptors without concat
                 mask = np.zeros((att_size, att_size))
 
-                valid_desc = descriptor[(descriptor[:, 4] > 0.25) & (descriptor[:, 5] < 0.5)]
+                valid_desc = descriptor[(descriptor[:, 4] > 0.5) & (descriptor[:, 5] < 0.5)]
 
                 # this is disgusting
                 if(len(valid_desc)):
