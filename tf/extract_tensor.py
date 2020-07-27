@@ -22,15 +22,15 @@ n_neighbors  = 10000
 model_input  = tf.placeholder(tf.float32, shape=(None,)+img_shape)
 model_output = build_yolo_v2(model_input, num_priors, phoc_size)
 
-#import tensorflow.contrib.slim as slim
-#model_vars = tf.trainable_variables()
-#slim.model_analyzer.analyze_vars(model_vars, print_info=True)
+import tensorflow.contrib.slim as slim
+model_vars = tf.trainable_variables()
+slim.model_analyzer.analyze_vars(model_vars, print_info=True)
 
 
 init_op = tf.global_variables_initializer()
 saver = tf.train.Saver()
 
-is_test = True
+is_test = False
 
 if not is_test:
     tensors_path = "../tensors/train"
@@ -61,14 +61,14 @@ with tf.Session() as sess:
         while(ret):
             frame_num = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
 
-            inp_feed = np.expand_dims(img_preprocess(cv2.cvtColor(inp,cv2.COLOR_BGR2RGB), shape=img_shape, letterbox=True), 0)
+            inp_feed = np.expand_dims(img_preprocess(cv2.cvtColor(inp,cv2.COLOR_BGR2RGB), shape=img_shape, letterbox=False), 0)
             feed_dict = {model_input : inp_feed}
             out = sess.run(model_output, feed_dict)
 
             # bn = tf.get_default_graph().get_tensor_by_name('YOLOv2/BatchNorm_21/gamma:0')
             leaky_20 = tf.get_default_graph().get_tensor_by_name('YOLOv2/leaky_20:0')
             tensor = sess.run(leaky_20, feed_dict)
-            tensors_all.append(tensor.flatten())
+            tensors_all.append(tensor.squeeze())
 
             sys.stdout.write("\r" + str(frame_num) + '/' + str(num_frames))
             sys.stdout.flush()
@@ -76,18 +76,8 @@ with tf.Session() as sess:
             ret, inp = cap.read()
         print("")
         tensors_all = np.array(tensors_all)
+        print(tensors_all.shape)
 
-        for index in range(int(num_frames/max_sequence_length)):
-            tensor_sequence = tensors_all[max_sequence_length*index:max_sequence_length*(index+1), :]
-
-            filename = 'tensor_' + video_name + '_' + str((max_sequence_length * index) + 1).zfill(6) + '.npy'
-            #np.save(os.path.join(tensors_path, filename), tensor_sequence)
-
-        if num_frames % max_sequence_length:
-            tensor_sequence = tensors_all[max_sequence_length * int(num_frames/max_sequence_length):, :]
-            pad = np.zeros((max_sequence_length - tensor_sequence.shape[0], *tensor_sequence.shape[1:]))
-            tensor_sequence = np.concatenate((tensor_sequence, pad), axis=0)
-
-            filename = 'tensor_' + video_name + '_' + str((max_sequence_length * int(num_frames/max_sequence_length)) + 1).zfill(6) + '.npy'
-            #np.save(os.path.join(tensors_path, filename), tensor_sequence)
+        filename = 'tensor_' + video_name + '.npy'
+        np.save(os.path.join(tensors_path, filename), tensors_all)
 
