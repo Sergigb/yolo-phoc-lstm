@@ -58,7 +58,6 @@ def main(args):
                 loss_step = loss.cpu().detach().numpy()
                 loss_epoch.append(loss_step)
 
-
                 print('Epoch ' + str(epoch + 1) + '/' + str(num_epochs) + ' - Step '
                        + str(step + 1) + '/' + str(len(data_loader)) + " - Loss: " + str(loss_step))
 
@@ -112,6 +111,4 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     main(args)
-
-# adam default everything 0.040837266 (10)
-# adam lr 1e-2 0.0333 (6)
+# best ~0.12 @ epoch 84 decay = 50

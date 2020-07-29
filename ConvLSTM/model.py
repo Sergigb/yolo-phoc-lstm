@@ -65,8 +65,10 @@ class ConvLSTMCell(torch.nn.Module):
 class RNN(torch.nn.Module):
     def __init__(self, ):
         super(RNN, self).__init__()
-        self.convlstm = ConvLSTMCell(64, 64, (5, 5), bias=True)
+        self.convlstm = ConvLSTMCell(64, 64, (3, 3), bias=False)
         self.conv_out = torch.nn.Conv2d(in_channels=64, out_channels=1, kernel_size=(3, 3), padding=True)
+        self.w1 = torch.nn.Linear(38 * 38, 38 * 38)
+        self.relu = torch.nn.ReLU()
 
     def forward(self, feat_maps, gt):
         """
@@ -80,6 +82,9 @@ class RNN(torch.nn.Module):
         for i in range(feat_maps.shape[1]):
             h_t, c_t = self.convlstm(feat_maps[:, i], (h_t, c_t))
             out[:, i, :] = self.conv_out(h_t).squeeze()
+            #out_t = self.conv_out(h_t).squeeze().reshape(feat_maps.shape[0], -1)
+            #out_t = self.relu(self.w1(out_t))
+            #out[:, i, :] = out_t.reshape(feat_maps.shape[0], 38, 38)
 
         if not self.training:
             out = torch.sigmoid(out)
