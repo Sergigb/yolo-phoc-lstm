@@ -117,12 +117,12 @@ for key in gt_dict.keys():
 with open("gt/gt.json", "w") as f:
     json.dump(training_samples, f)
 
-# visualize blblabl
+# visualize
 while(0):
     sample = random.choice(training_samples)
     video_name = sample["video_name"]
     object_id = sample["object_id"]
-    video_path = dataset_path + video_name
+    video_path = dataset_path + video_name + ".mp4"
 
     cap = cv2.VideoCapture(video_path)
     video_width = cap.get(cv2.CAP_PROP_FRAME_WIDTH)

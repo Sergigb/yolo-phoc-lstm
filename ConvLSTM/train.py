@@ -42,6 +42,14 @@ def main(args):
                 for param_group in optimizer.param_groups:
                     param_group['lr'] = learning_rate
 
+            if epoch < 3:
+                p = 1.0
+            elif epoch >= 3 and epoch < 6:
+                p = 0.5
+            elif epoch >= 6 and epoch < 9:
+                p = 0.25
+            else:
+                p = 0.0
 
             loss_epoch = []
             for step, (feat_maps, gt) in enumerate(data_loader):
@@ -50,7 +58,7 @@ def main(args):
                     gt = gt.cuda()
                 model.zero_grad()
 
-                out = model(feat_maps, gt)
+                out = model(feat_maps, gt, p)
                 loss = model_loss(out, gt)
                 loss.backward()
                 optimizer.step()

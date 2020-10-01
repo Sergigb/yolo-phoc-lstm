@@ -61,33 +61,41 @@ class ConvLSTMCell(torch.nn.Module):
                 torch.zeros(batch_size, self.hidden_dim, height, width, device=self.conv.weight.device))
 
 
-
 class RNN(torch.nn.Module):
     def __init__(self, ):
         super(RNN, self).__init__()
-        self.convlstm = ConvLSTMCell(64, 64, (3, 3), bias=False)
-        self.conv_out = torch.nn.Conv2d(in_channels=64, out_channels=1, kernel_size=(3, 3), padding=True)
-        self.w1 = torch.nn.Linear(38 * 38, 38 * 38)
+        self.in_size = 32
+        self.convlstm = ConvLSTMCell(self.in_size, self.in_size, (3, 3), bias=False)
+        self.feats_to_in = torch.nn.Conv2d(in_channels=64, out_channels=self.in_size // 2, kernel_size=(3, 3), padding=True)
+        self.mask_to_in = torch.nn.Conv2d(in_channels=1, out_channels=self.in_size // 2, kernel_size=(3, 3), padding=True)
+        self.out_to_mask = torch.nn.Conv2d(in_channels=self.in_size, out_channels=1, kernel_size=(3, 3), padding=True)
         self.relu = torch.nn.ReLU()
 
-    def forward(self, feat_maps, gt):
+    def forward(self, feat_maps, gt, p=1.0):
         """
         
         """
-        out = torch.zeros(feat_maps.shape[0], feat_maps.shape[1], 38, 38).cuda()
+        masks = torch.zeros(feat_maps.shape[0], feat_maps.shape[1], 38, 38).cuda()
+        h_t = torch.zeros(feat_maps.shape[0], self.in_size, 38, 38).cuda()
+        c_t = torch.zeros(feat_maps.shape[0], self.in_size, 38, 38).cuda()
 
-        h_t = feat_maps[:, 0] * gt[:, 0].unsqueeze(1)
-        c_t = torch.zeros(feat_maps.shape[0], 64, 38, 38).cuda()
+        masks[:, 0] = gt[:, 0]
 
-        for i in range(feat_maps.shape[1]):
-            h_t, c_t = self.convlstm(feat_maps[:, i], (h_t, c_t))
-            out[:, i, :] = self.conv_out(h_t).squeeze()
-            #out_t = self.conv_out(h_t).squeeze().reshape(feat_maps.shape[0], -1)
-            #out_t = self.relu(self.w1(out_t))
-            #out[:, i, :] = out_t.reshape(feat_maps.shape[0], 38, 38)
+        for i in range(1, feat_maps.shape[1]):
+            feats_in = self.feats_to_in(feat_maps[:, i])
+            if(random() > p):
+                mask_in = self.mask_to_in(masks[:, i-1].unsqueeze(1))
+            else:
+                mask_in = self.mask_to_in(gt[:, i-1].unsqueeze(1))
+
+            in_t = torch.cat((feats_in, mask_in), dim=1)
+
+            h_t, c_t = self.convlstm(in_t, (h_t, c_t))
+            mask = self.out_to_mask(h_t)
+            masks[:, i] = mask.squeeze(1)
 
         if not self.training:
-            out = torch.sigmoid(out)
+            masks = torch.sigmoid(masks)
 
-        return out
+        return masks
 
